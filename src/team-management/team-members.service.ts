@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { TeamRole } from '@prisma/client';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ProjectRole, TeamRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { TeamAccessService } from '../team-access/team-access.service';
 import { ListMembersQueryDto, UpdateMemberRoleDto, UpdateMemberStatusDto } from './team-management.dto';
@@ -59,6 +59,35 @@ export class TeamMembersService {
     if (target.isActive === input.isActive) return this.publicMember(target);
 
     return this.prisma.$transaction(async (tx) => {
+      if (!input.isActive) {
+        const managedProjects = await tx.projectMember.findMany({
+          where: {
+            teamMemberId: target.id,
+            isActive: true,
+            role: ProjectRole.PROJECT_MANAGER,
+            project: { archivedAt: null },
+          },
+          select: { projectId: true },
+          orderBy: { projectId: 'asc' },
+        });
+        for (const { projectId } of managedProjects) {
+          await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "team_platform"."projects" WHERE "id" = ${projectId} FOR UPDATE
+          `;
+          const remainingManagers = await tx.projectMember.count({
+            where: {
+              projectId,
+              teamMemberId: { not: target.id },
+              isActive: true,
+              role: ProjectRole.PROJECT_MANAGER,
+              teamMember: { isActive: true },
+            },
+          });
+          if (remainingManagers === 0) {
+            throw new ConflictException('This member is the last active Project Manager for an active project.');
+          }
+        }
+      }
       const updated = await tx.teamMember.update({
         where: { id: target.id },
         data: { isActive: input.isActive },

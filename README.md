@@ -65,4 +65,12 @@ The API forwards the browser's HttpOnly session cookie to Better Auth's server-s
 - Both endpoints support bounded cursor pagination plus event, entity, and actor filters. Cursors are checked against the active view before being used.
 - Responses include the actor and optional project summary; metadata remains the event-specific record written by the originating feature.
 
+## Feature 7: Project membership lifecycle
+
+- `PATCH /api/team/projects/:projectId/members/:teamMemberId/role` changes a member's project role. Only system admins can assign another Project Manager.
+- `DELETE /api/team/projects/:projectId/members/:teamMemberId` removes a membership without deleting its history.
+- Project Manager role changes, removals, and Team-member deactivation are serialized against the project record; the last active Project Manager cannot be demoted, removed, or disabled.
+- Re-adding an active member is idempotent. Changing an existing role uses the dedicated role endpoint.
+- Role changes and removals write ActivityLog entries in the same transaction.
+
 Database changes are versioned in `prisma/migrations`; each subsequent feature extends the schema in its own migration.

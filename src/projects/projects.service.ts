@@ -7,7 +7,12 @@ import {
 import { Prisma, ProjectRole, TeamRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { TeamAccessService } from '../team-access/team-access.service';
-import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './project.dto';
+import {
+  AddProjectMemberDto,
+  CreateProjectDto,
+  UpdateProjectDto,
+  UpdateProjectMemberRoleDto,
+} from './project.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -148,16 +153,28 @@ export class ProjectsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const membership = await tx.projectMember.upsert({
+        const existing = await tx.projectMember.findUnique({
           where: { projectId_teamMemberId: { projectId: project.id, teamMemberId: target.id } },
-          create: {
-            projectId: project.id,
-            teamMemberId: target.id,
-            role: input.role,
-            isActive: true,
-          },
-          update: { role: input.role, isActive: true },
         });
+        if (existing?.isActive) {
+          if (existing.role !== input.role) {
+            throw new ConflictException('Member is already assigned. Use the project role endpoint to change their role.');
+          }
+          return existing;
+        }
+        const membership = existing
+          ? await tx.projectMember.update({
+              where: { id: existing.id },
+              data: { role: input.role, isActive: true },
+            })
+          : await tx.projectMember.create({
+              data: {
+                projectId: project.id,
+                teamMemberId: target.id,
+                role: input.role,
+                isActive: true,
+              },
+            });
         await tx.activityLog.create({
           data: {
             actorTeamMemberId: actor.id,
@@ -175,6 +192,110 @@ export class ProjectsService {
         throw new ConflictException('Project membership could not be saved.');
       }
       throw error;
+    }
+  }
+
+  async updateMemberRole(
+    userId: string,
+    projectId: string,
+    teamMemberId: string,
+    input: UpdateProjectMemberRoleDto,
+  ) {
+    const { member: actor, project } = await this.requireProjectManager(userId, projectId);
+    if (
+      input.role === ProjectRole.PROJECT_MANAGER &&
+      actor.role !== TeamRole.SYSTEM_OWNER &&
+      actor.role !== TeamRole.SYSTEM_ADMIN
+    ) {
+      throw new ForbiddenException('Only a system administrator can assign another project manager.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockProject(tx, project.id);
+      const membership = await tx.projectMember.findUnique({
+        where: { projectId_teamMemberId: { projectId: project.id, teamMemberId } },
+      });
+      if (!membership?.isActive) throw new NotFoundException('Active project membership not found.');
+      if (membership.role === input.role) return membership;
+
+      if (
+        membership.role === ProjectRole.PROJECT_MANAGER &&
+        input.role !== ProjectRole.PROJECT_MANAGER
+      ) {
+        await this.requireAnotherProjectManager(tx, project.id, membership.id);
+      }
+
+      const updated = await tx.projectMember.update({
+        where: { id: membership.id },
+        data: { role: input.role },
+      });
+      await tx.activityLog.create({
+        data: {
+          actorTeamMemberId: actor.id,
+          projectId: project.id,
+          eventType: 'PROJECT_MEMBER_ROLE_CHANGED',
+          entityType: 'PROJECT_MEMBER',
+          entityId: membership.id,
+          metadata: { teamMemberId, before: membership.role, after: updated.role },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async removeMember(userId: string, projectId: string, teamMemberId: string) {
+    const { member: actor, project } = await this.requireProjectManager(userId, projectId);
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockProject(tx, project.id);
+      const membership = await tx.projectMember.findUnique({
+        where: { projectId_teamMemberId: { projectId: project.id, teamMemberId } },
+        include: { teamMember: { select: { email: true } } },
+      });
+      if (!membership?.isActive) throw new NotFoundException('Active project membership not found.');
+      if (membership.role === ProjectRole.PROJECT_MANAGER) {
+        await this.requireAnotherProjectManager(tx, project.id, membership.id);
+      }
+
+      const removed = await tx.projectMember.update({
+        where: { id: membership.id },
+        data: { isActive: false },
+      });
+      await tx.activityLog.create({
+        data: {
+          actorTeamMemberId: actor.id,
+          projectId: project.id,
+          eventType: 'PROJECT_MEMBER_REMOVED',
+          entityType: 'PROJECT_MEMBER',
+          entityId: membership.id,
+          metadata: { teamMemberId, email: membership.teamMember.email, role: membership.role },
+        },
+      });
+      return { id: removed.id, teamMemberId, isActive: removed.isActive };
+    });
+  }
+
+  private async lockProject(tx: Prisma.TransactionClient, projectId: string): Promise<void> {
+    await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "team_platform"."projects" WHERE "id" = ${projectId} FOR UPDATE
+    `;
+  }
+
+  private async requireAnotherProjectManager(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    currentMembershipId: string,
+  ): Promise<void> {
+    const otherManagers = await tx.projectMember.count({
+      where: {
+        projectId,
+        id: { not: currentMembershipId },
+        isActive: true,
+        role: ProjectRole.PROJECT_MANAGER,
+        teamMember: { isActive: true },
+      },
+    });
+    if (otherManagers === 0) {
+      throw new ConflictException('A project must keep at least one active Project Manager.');
     }
   }
 

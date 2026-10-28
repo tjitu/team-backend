@@ -32,3 +32,8 @@ export class AddProjectMemberDto {
   @IsEnum(ProjectRole)
   role!: ProjectRole;
 }
+
+export class UpdateProjectMemberRoleDto {
+  @IsEnum(ProjectRole)
+  role!: ProjectRole;
+}

@@ -1,7 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
-import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './project.dto';
+import {
+  AddProjectMemberDto,
+  CreateProjectDto,
+  UpdateProjectDto,
+  UpdateProjectMemberRoleDto,
+} from './project.dto';
 import { ProjectsService } from './projects.service';
 
 @Controller('team/projects')
@@ -45,5 +50,24 @@ export class ProjectsController {
     @Body() input: AddProjectMemberDto,
   ) {
     return this.projects.addMember(request.user.id, projectId, input);
+  }
+
+  @Patch(':projectId/members/:teamMemberId/role')
+  updateMemberRole(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('teamMemberId') teamMemberId: string,
+    @Body() input: UpdateProjectMemberRoleDto,
+  ) {
+    return this.projects.updateMemberRole(request.user.id, projectId, teamMemberId, input);
+  }
+
+  @Delete(':projectId/members/:teamMemberId')
+  removeMember(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('teamMemberId') teamMemberId: string,
+  ) {
+    return this.projects.removeMember(request.user.id, projectId, teamMemberId);
   }
 }
