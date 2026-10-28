@@ -69,6 +69,8 @@ model TeamMember {
   taskAssignmentsMade TaskAssignee[] @relation("TaskAssignor")
   taskComments TaskComment[]
   invitationsCreated TeamInvitation[] @relation("InvitationCreator")
+  departments TeamMemberDepartment[]
+  departmentAssignmentsMade TeamMemberDepartment[] @relation("DepartmentAssigner")
 
   @@map("team_members")
   @@schema("team_platform")
@@ -201,5 +203,39 @@ model TeamInvitation {
   @@index([email, status, expiresAt])
   @@index([status, createdAt])
   @@map("team_invitations")
+  @@schema("team_platform")
+}
+
+model Department {
+  id          String                 @id @default(cuid())
+  name        String                 @unique
+  slug        String                 @unique
+  description String?
+  isActive    Boolean                @default(true) @map("is_active")
+  version     Int                    @default(1)
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  members     TeamMemberDepartment[]
+
+  @@index([isActive, name])
+  @@map("departments")
+  @@schema("team_platform")
+}
+
+model TeamMemberDepartment {
+  id                    String     @id @default(cuid())
+  departmentId          String     @map("department_id")
+  teamMemberId          String     @map("team_member_id")
+  assignedByTeamMemberId String    @map("assigned_by_team_member_id")
+  isActive              Boolean    @default(true) @map("is_active")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+  department            Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  teamMember            TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Restrict)
+  assignedBy            TeamMember @relation("DepartmentAssigner", fields: [assignedByTeamMemberId], references: [id], onDelete: Restrict)
+
+  @@unique([departmentId, teamMemberId])
+  @@index([teamMemberId, isActive])
+  @@map("team_member_departments")
   @@schema("team_platform")
 }

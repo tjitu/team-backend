@@ -25,7 +25,19 @@ export class TeamMembersService {
             }
           : {}),
       },
-      select: { id: true, userId: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        departments: {
+          where: { isActive: true, department: { isActive: true } },
+          select: { department: { select: { id: true, name: true, slug: true } } },
+        },
+      },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
       take: 500,
     });

@@ -49,4 +49,13 @@ The API forwards the browser's HttpOnly session cookie to Better Auth's server-s
 - Invitation tokens are random, stored only as SHA-256 hashes, expire after 72 hours, and are sent through configured SMTP. Delivery failures stay visible as `FAILED` invitations so an admin can retry.
 - All state-changing HTTP routes require the exact configured frontend Origin to reduce CSRF risk for cookie-authenticated calls.
 
+## Feature 5: Departments
+
+- `GET /api/team/departments` lists active departments for members and all departments for system admins.
+- `POST /api/team/departments` creates a department. `PATCH /api/team/departments/:departmentId` updates its name, description, or active state with version conflict protection.
+- `GET /api/team/departments/:departmentId/members` lists active department members for system admins.
+- `POST /api/team/departments/:departmentId/members` assigns an active Team member by email. `DELETE /api/team/departments/:departmentId/members/:teamMemberId` removes the association without deleting history.
+- `/api/team/me` and the admin member list include active department assignments.
+- Department and membership mutations write ActivityLog records in their database transaction.
+
 Database changes are versioned in `prisma/migrations`; each subsequent feature extends the schema in its own migration.
