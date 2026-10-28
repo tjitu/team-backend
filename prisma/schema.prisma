@@ -42,6 +42,16 @@ enum TaskPriority {
   @@schema("team_platform")
 }
 
+enum InvitationStatus {
+  PENDING
+  SENT
+  FAILED
+  ACCEPTED
+  REVOKED
+
+  @@schema("team_platform")
+}
+
 model TeamMember {
   id        String   @id @default(cuid())
   userId    String   @unique @map("user_id")
@@ -58,6 +68,7 @@ model TeamMember {
   assignedTasks TaskAssignee[] @relation("TaskAssignee")
   taskAssignmentsMade TaskAssignee[] @relation("TaskAssignor")
   taskComments TaskComment[]
+  invitationsCreated TeamInvitation[] @relation("InvitationCreator")
 
   @@map("team_members")
   @@schema("team_platform")
@@ -170,5 +181,25 @@ model TaskComment {
 
   @@index([taskId, createdAt])
   @@map("task_comments")
+  @@schema("team_platform")
+}
+
+model TeamInvitation {
+  id                    String           @id @default(cuid())
+  email                 String
+  role                  TeamRole         @default(MEMBER)
+  tokenHash             String           @unique @map("token_hash")
+  status                InvitationStatus @default(PENDING)
+  expiresAt             DateTime         @map("expires_at")
+  acceptedAt            DateTime?        @map("accepted_at")
+  revokedAt             DateTime?        @map("revoked_at")
+  createdByTeamMemberId String           @map("created_by_team_member_id")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+  createdBy             TeamMember       @relation("InvitationCreator", fields: [createdByTeamMemberId], references: [id], onDelete: Restrict)
+
+  @@index([email, status, expiresAt])
+  @@index([status, createdAt])
+  @@map("team_invitations")
   @@schema("team_platform")
 }

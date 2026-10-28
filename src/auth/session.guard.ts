@@ -13,6 +13,7 @@ interface BetterAuthSessionResponse {
     id?: unknown;
     email?: unknown;
     name?: unknown;
+    emailVerified?: unknown;
   };
 }
 
@@ -64,6 +65,7 @@ export class SessionGuard implements CanActivate {
       id: user.id,
       ...(typeof user.email === 'string' ? { email: user.email } : {}),
       ...(typeof user.name === 'string' ? { name: user.name } : {}),
+      ...(typeof user.emailVerified === 'boolean' ? { emailVerified: user.emailVerified } : {}),
     };
     return true;
   }

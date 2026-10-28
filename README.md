@@ -40,4 +40,13 @@ The API forwards the browser's HttpOnly session cookie to Better Auth's server-s
 - Project Viewers can read tasks; Project Managers and system admins can manage assignments and archive tasks. The reporter and assignees can update task content/status.
 - Task and comment mutations write ActivityLog rows in the same database transaction.
 
+## Feature 4: Team administration and invitations
+
+- `GET /api/team/members` lists members for System Owners/Admins. Admins can activate or deactivate members; only the Owner can change roles.
+- `GET, POST /api/team/invitations` lists invitations and invites members. Owners/Admins can invite `MEMBER`; only the Owner can grant `SYSTEM_ADMIN`.
+- `POST /api/team/invitations/:invitationId/resend` rotates the one-time token and expiry. `POST .../:invitationId/revoke` closes an outstanding invitation.
+- `POST /api/team/invitations/accept` requires a signed-in Better Auth user with a verified email matching the invitation.
+- Invitation tokens are random, stored only as SHA-256 hashes, expire after 72 hours, and are sent through configured SMTP. Delivery failures stay visible as `FAILED` invitations so an admin can retry.
+- All state-changing HTTP routes require the exact configured frontend Origin to reduce CSRF risk for cookie-authenticated calls.
+
 Database changes are versioned in `prisma/migrations`; each subsequent feature extends the schema in its own migration.

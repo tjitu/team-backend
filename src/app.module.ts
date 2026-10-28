@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health.controller';
 import { TeamAccessModule } from './team-access/team-access.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
+import { TeamManagementModule } from './team-management/team-management.module';
+import { TrustedOriginGuard } from './auth/trusted-origin.guard';
 
 @Module({
-  imports: [DatabaseModule, TeamAccessModule, ProjectsModule, TasksModule],
+  imports: [DatabaseModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule],
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: TrustedOriginGuard }],
 })
 export class AppModule {}
