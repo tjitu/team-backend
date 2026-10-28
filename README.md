@@ -58,4 +58,11 @@ The API forwards the browser's HttpOnly session cookie to Better Auth's server-s
 - `/api/team/me` and the admin member list include active department assignments.
 - Department and membership mutations write ActivityLog records in their database transaction.
 
+## Feature 6: Activity history
+
+- `GET /api/team/projects/:projectId/activity` returns the project history to active project members and system admins.
+- `GET /api/team/activity` returns team-wide history to System Owners/Admins.
+- Both endpoints support bounded cursor pagination plus event, entity, and actor filters. Cursors are checked against the active view before being used.
+- Responses include the actor and optional project summary; metadata remains the event-specific record written by the originating feature.
+
 Database changes are versioned in `prisma/migrations`; each subsequent feature extends the schema in its own migration.

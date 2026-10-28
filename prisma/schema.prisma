@@ -125,7 +125,8 @@ model ActivityLog {
   actor            TeamMember  @relation(fields: [actorTeamMemberId], references: [id], onDelete: Restrict)
   project          Project?    @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
-  @@index([projectId, createdAt])
+  @@index([projectId, createdAt, id])
+  @@index([createdAt, id])
   @@index([entityType, entityId, createdAt])
   @@map("activity_logs")
   @@schema("team_platform")
