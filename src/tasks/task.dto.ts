@@ -25,6 +25,7 @@ export class ListTasksQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   assigneeId?: string;
 
   @IsOptional()
@@ -38,6 +39,11 @@ export class ListTasksQueryDto {
   @IsOptional()
   @IsDateString()
   dueTo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  cursor?: string;
 
   @IsOptional()
   @IsString()
