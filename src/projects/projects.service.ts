@@ -39,6 +39,23 @@ export class ProjectsService {
     });
   }
 
+  async listArchived(userId: string) {
+    const member = await this.teamAccess.getActiveMember(userId);
+    const isAdmin = member.role === TeamRole.SYSTEM_OWNER || member.role === TeamRole.SYSTEM_ADMIN;
+    return this.prisma.project.findMany({
+      where: {
+        archivedAt: { not: null },
+        ...(isAdmin ? {} : { members: { some: { teamMemberId: member.id, role: ProjectRole.PROJECT_MANAGER, isActive: true } } }),
+      },
+      include: {
+        department: { select: { id: true, name: true, slug: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { members: { where: { isActive: true } } } },
+      },
+      orderBy: [{ archivedAt: 'desc' }, { id: 'asc' }],
+    });
+  }
+
   async create(userId: string, input: CreateProjectDto) {
     const member = await this.teamAccess.getActiveMember(userId);
     this.validateProjectPeriod(input.startsAt, input.endsAt);
@@ -176,6 +193,36 @@ export class ProjectsService {
         },
       });
       return { id: project.id, archivedAt };
+    });
+  }
+
+  async restore(userId: string, projectId: string) {
+    const { member, project } = await this.requireProjectManager(userId, projectId, true);
+    if (!project.archivedAt) throw new BadRequestException('Project is not archived.');
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.project.updateMany({
+        where: { id: project.id, version: project.version, archivedAt: { not: null } },
+        data: { archivedAt: null, version: { increment: 1 } },
+      });
+      if (result.count === 0) throw new ConflictException('Project changed. Reload and retry.');
+      const restored = await tx.project.findUniqueOrThrow({
+        where: { id: project.id },
+        include: {
+          department: { select: { id: true, name: true, slug: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
+          _count: { select: { members: { where: { isActive: true } } } },
+        },
+      });
+      await tx.activityLog.create({
+        data: {
+          actorTeamMemberId: member.id,
+          projectId: project.id,
+          eventType: 'PROJECT_RESTORED',
+          entityType: 'PROJECT',
+          entityId: project.id,
+        },
+      });
+      return restored;
     });
   }
 

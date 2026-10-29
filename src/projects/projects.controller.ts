@@ -19,6 +19,11 @@ export class ProjectsController {
     return this.projects.list(request.user.id);
   }
 
+  @Get('archived')
+  listArchived(@Req() request: AuthenticatedRequest) {
+    return this.projects.listArchived(request.user.id);
+  }
+
   @Post()
   create(@Req() request: AuthenticatedRequest, @Body() input: CreateProjectDto) {
     return this.projects.create(request.user.id, input);
@@ -41,6 +46,11 @@ export class ProjectsController {
   @Post(':projectId/archive')
   archive(@Req() request: AuthenticatedRequest, @Param('projectId') projectId: string) {
     return this.projects.archive(request.user.id, projectId);
+  }
+
+  @Post(':projectId/restore')
+  restore(@Req() request: AuthenticatedRequest, @Param('projectId') projectId: string) {
+    return this.projects.restore(request.user.id, projectId);
   }
 
   @Post(':projectId/members')
