@@ -76,7 +76,6 @@ export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
   private headers(secretKey: string): HeadersInit {
     return {
       apikey: secretKey,
-      Authorization: `Bearer ${secretKey}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };
