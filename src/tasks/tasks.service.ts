@@ -123,6 +123,7 @@ export class TasksService {
 
   async update(userId: string, projectId: string, taskId: string, input: UpdateTaskDto) {
     const access = await this.getProjectAccess(userId, projectId);
+    this.requireWritableProject(access);
     const task = await this.prisma.teamTask.findFirst({
       where: { id: taskId, projectId, archivedAt: null },
       include: { assignees: { select: { teamMemberId: true } } },
@@ -325,8 +326,9 @@ export class TasksService {
   ): void {
     const canEdit =
       this.canManageProject(access) ||
+      access.projectRole === ProjectRole.MEMBER ||
       task.createdByTeamMemberId === access.member.id ||
       task.assignees.some((assignee) => assignee.teamMemberId === access.member.id);
-    if (!canEdit) throw new ForbiddenException('Only the reporter, an assignee, or a Project Manager can update this task.');
+    if (!canEdit) throw new ForbiddenException('Only project members or task participants can update this task.');
   }
 }
