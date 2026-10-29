@@ -25,10 +25,10 @@ export class SessionGuard implements CanActivate {
     const sessionUrl = process.env.BETTER_AUTH_SESSION_URL;
 
     if (!cookie) {
-      throw new UnauthorizedException('Sign in is required.');
+      throw new UnauthorizedException('Sesi tidak ditemukan. Masuk dengan akun Jitu Anda.');
     }
     if (!sessionUrl) {
-      throw new ServiceUnavailableException('Authentication is not configured.');
+      throw new ServiceUnavailableException('Layanan autentikasi Jitu belum dikonfigurasi. Hubungi administrator.');
     }
 
     let response: Response;
@@ -39,21 +39,21 @@ export class SessionGuard implements CanActivate {
         cache: 'no-store',
       });
     } catch {
-      throw new ServiceUnavailableException('The authentication service is unavailable.');
+      throw new ServiceUnavailableException('Layanan autentikasi Jitu tidak dapat dihubungi. Periksa konfigurasi, lalu muat ulang.');
     }
 
     if (!response.ok) {
       if (response.status >= 500) {
-        throw new ServiceUnavailableException('The authentication service is unavailable.');
+        throw new ServiceUnavailableException('Layanan autentikasi Jitu tidak dapat dihubungi. Periksa konfigurasi, lalu muat ulang.');
       }
-      throw new UnauthorizedException('Sign in is required.');
+      throw new UnauthorizedException('Sesi tidak ditemukan. Masuk dengan akun Jitu Anda.');
     }
 
     let body: unknown;
     try {
       body = await response.json();
     } catch {
-      throw new ServiceUnavailableException('The authentication service returned an invalid response.');
+      throw new ServiceUnavailableException('Layanan autentikasi Jitu memberikan respons yang tidak valid. Hubungi administrator.');
     }
 
     const user =
@@ -61,7 +61,7 @@ export class SessionGuard implements CanActivate {
         ? (body as BetterAuthSessionResponse).user
         : undefined;
     if (typeof user?.id !== 'string' || user.id.length === 0) {
-      throw new UnauthorizedException('Sign in is required.');
+      throw new UnauthorizedException('Sesi tidak ditemukan. Masuk dengan akun Jitu Anda.');
     }
 
     request.user = {
