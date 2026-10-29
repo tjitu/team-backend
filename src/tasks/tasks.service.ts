@@ -30,6 +30,11 @@ export class TasksService {
 
   async list(userId: string, projectId: string, query: ListTasksQueryDto) {
     await this.getProjectAccess(userId, projectId);
+    const dueFrom = query.dueFrom ? new Date(`${query.dueFrom.slice(0, 10)}T00:00:00.000Z`) : undefined;
+    const dueTo = query.dueTo ? new Date(`${query.dueTo.slice(0, 10)}T23:59:59.999Z`) : undefined;
+    if (dueFrom && dueTo && dueFrom > dueTo) {
+      throw new BadRequestException('The due date range is invalid.');
+    }
     return this.prisma.teamTask.findMany({
       where: {
         projectId,
@@ -37,6 +42,8 @@ export class TasksService {
         ...(query.status ? { status: query.status } : {}),
         ...(query.priority ? { priority: query.priority } : {}),
         ...(query.assigneeId ? { assignees: { some: { teamMemberId: query.assigneeId } } } : {}),
+        ...(query.creatorId ? { createdByTeamMemberId: query.creatorId } : {}),
+        ...(dueFrom || dueTo ? { dueAt: { ...(dueFrom ? { gte: dueFrom } : {}), ...(dueTo ? { lte: dueTo } : {}) } } : {}),
         ...(query.q
           ? {
               OR: [

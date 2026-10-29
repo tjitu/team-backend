@@ -29,6 +29,18 @@ export class ListTasksQueryDto {
 
   @IsOptional()
   @IsString()
+  creatorId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueTo?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   q?: string;
 
