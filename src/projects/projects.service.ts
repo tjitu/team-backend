@@ -216,6 +216,13 @@ export class ProjectsService {
         where: { projectId_teamMemberId: { projectId: project.id, teamMemberId } },
       });
       if (!membership?.isActive) throw new NotFoundException('Active project membership not found.');
+      if (
+        teamMemberId === actor.id &&
+        membership.role === ProjectRole.PROJECT_MANAGER &&
+        input.role !== ProjectRole.PROJECT_MANAGER
+      ) {
+        throw new ForbiddenException('You cannot change your own project manager role.');
+      }
       if (membership.role === input.role) return membership;
 
       if (
