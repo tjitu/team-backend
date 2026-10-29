@@ -49,14 +49,17 @@ export class SessionGuard implements CanActivate {
       throw new UnauthorizedException('Sign in is required.');
     }
 
-    let body: BetterAuthSessionResponse;
+    let body: unknown;
     try {
-      body = (await response.json()) as BetterAuthSessionResponse;
+      body = await response.json();
     } catch {
       throw new ServiceUnavailableException('The authentication service returned an invalid response.');
     }
 
-    const user = body.user;
+    const user =
+      body && typeof body === 'object'
+        ? (body as BetterAuthSessionResponse).user
+        : undefined;
     if (typeof user?.id !== 'string' || user.id.length === 0) {
       throw new UnauthorizedException('Sign in is required.');
     }
