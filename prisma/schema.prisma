@@ -98,6 +98,7 @@ model Project {
 
   @@index([departmentId, archivedAt, updatedAt])
   @@index([archivedAt, updatedAt])
+  @@index([createdById])
   @@map("projects")
   @@schema("team_platform")
 }
@@ -134,6 +135,7 @@ model ActivityLog {
   @@index([projectId, createdAt, id])
   @@index([createdAt, id])
   @@index([entityType, entityId, createdAt])
+  @@index([actorTeamMemberId])
   @@map("activity_logs")
   @@schema("team_platform")
 }
@@ -174,6 +176,7 @@ model TaskAssignee {
 
   @@unique([taskId, teamMemberId])
   @@index([teamMemberId, taskId])
+  @@index([assignedByMemberId])
   @@map("task_assignees")
   @@schema("team_platform")
 }
@@ -189,6 +192,7 @@ model TaskComment {
   author         TeamMember @relation(fields: [authorMemberId], references: [id], onDelete: Restrict)
 
   @@index([taskId, createdAt])
+  @@index([authorMemberId])
   @@map("task_comments")
   @@schema("team_platform")
 }
@@ -209,6 +213,7 @@ model TeamInvitation {
 
   @@index([email, status, expiresAt])
   @@index([status, createdAt])
+  @@index([createdByTeamMemberId])
   @@map("team_invitations")
   @@schema("team_platform")
 }
@@ -244,6 +249,7 @@ model TeamMemberDepartment {
 
   @@unique([departmentId, teamMemberId])
   @@index([teamMemberId, isActive])
+  @@index([assignedByTeamMemberId])
   @@map("team_member_departments")
   @@schema("team_platform")
 }
