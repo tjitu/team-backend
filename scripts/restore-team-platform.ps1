@@ -55,7 +55,7 @@ try {
     throw 'The target already has a team_platform schema. Restore only into a fresh isolated project.'
   }
 
-  & $pgRestorePath --exit-on-error --single-transaction --no-owner --no-acl $BackupFile
+  & $pgRestorePath --dbname=$env:PGDATABASE --exit-on-error --single-transaction --no-owner --no-acl $BackupFile
   if ($LASTEXITCODE -ne 0) { throw 'Restore failed. Inspect the target project before retrying.' }
 
   Write-Output 'Team Platform schema and data restored successfully.'
