@@ -234,6 +234,9 @@ export class ProjectsService {
     }
     const target = await this.prisma.teamMember.findUnique({ where: { email } });
     if (!target?.isActive) throw new NotFoundException('Active Team member not found.');
+    if (target.id === actor.id) {
+      throw new ForbiddenException('You cannot add yourself to a project or change your own project role.');
+    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -300,12 +303,8 @@ export class ProjectsService {
         where: { projectId_teamMemberId: { projectId: project.id, teamMemberId } },
       });
       if (!membership?.isActive) throw new NotFoundException('Active project membership not found.');
-      if (
-        teamMemberId === actor.id &&
-        membership.role === ProjectRole.PROJECT_MANAGER &&
-        input.role !== ProjectRole.PROJECT_MANAGER
-      ) {
-        throw new ForbiddenException('You cannot change your own project manager role.');
+      if (teamMemberId === actor.id) {
+        throw new ForbiddenException('You cannot change your own project role.');
       }
       if (membership.role === input.role) return membership;
 
