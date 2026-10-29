@@ -41,7 +41,6 @@ export class ProjectsService {
 
   async create(userId: string, input: CreateProjectDto) {
     const member = await this.teamAccess.getActiveMember(userId);
-    this.requireAdmin(member.role);
     this.validateProjectPeriod(input.startsAt, input.endsAt);
     await this.requireActiveDepartment(input.departmentId);
     const baseSlug = this.toSlug(input.name);
@@ -359,12 +358,6 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('Project not found.');
     return { member, project };
-  }
-
-  private requireAdmin(role: TeamRole): void {
-    if (role !== TeamRole.SYSTEM_OWNER && role !== TeamRole.SYSTEM_ADMIN) {
-      throw new ForbiddenException('Only a system administrator can create projects.');
-    }
   }
 
   private async requireActiveDepartment(departmentId: string): Promise<void> {
