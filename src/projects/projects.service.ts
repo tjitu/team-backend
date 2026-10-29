@@ -259,6 +259,9 @@ export class ProjectsService {
         include: { teamMember: { select: { email: true } } },
       });
       if (!membership?.isActive) throw new NotFoundException('Active project membership not found.');
+      if (teamMemberId === actor.id) {
+        throw new ForbiddenException('You cannot remove yourself from a project.');
+      }
       if (membership.role === ProjectRole.PROJECT_MANAGER) {
         await this.requireAnotherProjectManager(tx, project.id, membership.id);
       }
