@@ -53,10 +53,9 @@ export class SupabaseAuthProvider implements AuthProvider {
       user.user_metadata && typeof user.user_metadata === 'object'
         ? user.user_metadata as Record<string, unknown>
         : undefined;
-    const name =
-      (typeof metadata?.full_name === 'string' && metadata.full_name) ||
-      (typeof metadata?.name === 'string' && metadata.name) ||
-      undefined;
+    const name = [metadata?.full_name, metadata?.name, metadata?.preferred_username, metadata?.username]
+      .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      ?.trim();
 
     return {
       id: user.id,

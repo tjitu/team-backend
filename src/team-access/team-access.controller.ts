@@ -14,7 +14,7 @@ export class TeamAccessController {
 
   @Get()
   async getCurrentMember(@Req() request: AuthenticatedRequest) {
-    const member = await this.teamAccess.getActiveMember(request.user.id);
+    const member = await this.teamAccess.getActiveMember(request.user.id, request.user.name);
     const departments = await this.prisma.teamMemberDepartment.findMany({
       where: { teamMemberId: member.id, isActive: true, department: { isActive: true } },
       select: { department: { select: { id: true, name: true, slug: true } } },
