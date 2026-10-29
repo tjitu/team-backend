@@ -1,24 +1,24 @@
 # Team Platform Backend
 
-NestJS API for the Team Platform. It uses PostgreSQL through Prisma and verifies the existing Better Auth session by calling its `get-session` endpoint; it does not create or modify Better Auth tables.
+NestJS API for the Team Platform. It stores workspace data in PostgreSQL through Prisma and verifies Supabase Auth access tokens through a dedicated auth-provider adapter. The Supabase project can be changed by replacing environment values; application services keep using Supabase user IDs as opaque identities.
 
 ## Feature 1: Team access
 
-- A valid Better Auth session identifies the user; it does not grant Team Platform access by itself.
-- The API also requires an active `TeamMember` row keyed by Better Auth's opaque `userId`.
+- A valid Supabase Auth session identifies the user; it does not grant Team Platform access by itself.
+- The API also requires an active `TeamMember` row keyed by Supabase Auth's opaque `userId`.
 - Team roles are separate from Jitu product roles: `SYSTEM_OWNER`, `SYSTEM_ADMIN`, and `MEMBER`.
 - Missing membership denies access. The only membership bootstrap path is a one-time owner command.
 - `GET /api/health` is public. `GET /api/team/me` requires a valid session and active Team membership.
 
 ## Local setup
 
-1. Use Node.js 22.12 or newer and PostgreSQL 15 or newer. Create a database for this service.
-2. Copy `.env.example` to `.env`. Set `DATABASE_URL`, `BETTER_AUTH_SESSION_URL`, and `TEAM_FRONTEND_ORIGIN`.
+1. Use Node.js 22.12 or newer. Create a Supabase project and copy its database connection string, project URL, and publishable key.
+2. Copy `.env.example` to `.env`. Set `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `TEAM_FRONTEND_ORIGIN`.
 3. Run `npm install`, `npm run db:generate`, and `npm run db:deploy`.
-4. Set `TEAM_OWNER_USER_ID`, `TEAM_OWNER_EMAIL`, and `TEAM_OWNER_NAME` to an existing Better Auth identity; run `npm run bootstrap:owner` once, then remove those temporary values.
+4. Create or invite the initial user in Supabase Auth. Set `TEAM_OWNER_USER_ID`, `TEAM_OWNER_EMAIL`, and `TEAM_OWNER_NAME` to that Supabase Auth identity; run `npm run bootstrap:owner` once, then remove those temporary values.
 5. Run `npm run start:dev`.
 
-The API forwards the browser's HttpOnly session cookie to Better Auth's server-side `get-session` endpoint, which is the session lookup pattern described in the [Better Auth session documentation](https://better-auth.com/docs/concepts/session-management). Nest runs on Node.js 20.19+ or Node.js 22.12+; this app targets Node.js 22.12+ ([NestJS requirements](https://docs.nestjs.com/first-steps)).
+The API validates bearer access tokens with Supabase Auth's user endpoint. The frontend stores and refreshes sessions using Supabase's SSR cookie integration. Keep the Team Platform schema outside Supabase's exposed Data API schemas; business data is accessed through this API. Never put a Supabase secret or service-role key in the frontend. Nest runs on Node.js 20.19+ or Node.js 22.12+; this app targets Node.js 22.12+ ([NestJS requirements](https://docs.nestjs.com/first-steps)).
 
 ## Feature 2: Project workspaces
 
@@ -45,7 +45,7 @@ The API forwards the browser's HttpOnly session cookie to Better Auth's server-s
 - `GET /api/team/members` lists members for System Owners/Admins. Admins can activate or deactivate members; only the Owner can change roles.
 - `GET, POST /api/team/invitations` lists invitations and invites members. Owners/Admins can invite `MEMBER`; only the Owner can grant `SYSTEM_ADMIN`.
 - `POST /api/team/invitations/:invitationId/resend` rotates the one-time token and expiry. `POST .../:invitationId/revoke` closes an outstanding invitation.
-- `POST /api/team/invitations/accept` requires a signed-in Better Auth user with a verified email matching the invitation.
+- `POST /api/team/invitations/accept` requires a signed-in Supabase Auth user with a verified email matching the invitation.
 - Invitation tokens are random, stored only as SHA-256 hashes, expire after 72 hours, and are sent through configured SMTP. Delivery failures stay visible as `FAILED` invitations so an admin can retry.
 - All state-changing HTTP routes require the exact configured frontend Origin to reduce CSRF risk for cookie-authenticated calls.
 

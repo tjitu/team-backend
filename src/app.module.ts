@@ -9,9 +9,10 @@ import { TeamManagementModule } from './team-management/team-management.module';
 import { TrustedOriginGuard } from './auth/trusted-origin.guard';
 import { DepartmentsModule } from './departments/departments.module';
 import { ActivityModule } from './activity/activity.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
-  imports: [DatabaseModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule, DepartmentsModule, ActivityModule],
+  imports: [DatabaseModule, AuthModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule, DepartmentsModule, ActivityModule],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: TrustedOriginGuard }],
 })
