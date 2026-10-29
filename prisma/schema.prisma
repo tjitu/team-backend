@@ -82,6 +82,9 @@ model Project {
   name        String
   slug        String   @unique
   description String?
+  departmentId String  @map("department_id")
+  startsAt    DateTime? @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
   createdById String   @map("created_by_id")
   version     Int      @default(1)
   archivedAt  DateTime? @map("archived_at")
@@ -90,8 +93,10 @@ model Project {
   members     ProjectMember[]
   activityLogs ActivityLog[]
   createdBy   TeamMember @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  department  Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   tasks       TeamTask[]
 
+  @@index([departmentId, archivedAt, updatedAt])
   @@index([archivedAt, updatedAt])
   @@map("projects")
   @@schema("team_platform")
@@ -218,6 +223,7 @@ model Department {
   createdAt   DateTime               @default(now()) @map("created_at")
   updatedAt   DateTime               @updatedAt @map("updated_at")
   members     TeamMemberDepartment[]
+  projects    Project[]
 
   @@index([isActive, name])
   @@map("departments")

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -29,7 +30,11 @@ export class ProjectsService {
         archivedAt: null,
         ...(isAdmin ? {} : { members: { some: { teamMemberId: member.id, isActive: true } } }),
       },
-      include: { _count: { select: { members: { where: { isActive: true } } } } },
+      include: {
+        department: { select: { id: true, name: true, slug: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { members: { where: { isActive: true } } } },
+      },
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
     });
   }
@@ -37,6 +42,8 @@ export class ProjectsService {
   async create(userId: string, input: CreateProjectDto) {
     const member = await this.teamAccess.getActiveMember(userId);
     this.requireAdmin(member.role);
+    this.validateProjectPeriod(input.startsAt, input.endsAt);
+    await this.requireActiveDepartment(input.departmentId);
     const baseSlug = this.toSlug(input.name);
     const project = await this.prisma.$transaction(async (tx) => {
       const created = await tx.project.create({
@@ -44,6 +51,9 @@ export class ProjectsService {
           name: input.name.trim(),
           slug: `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`,
           description: input.description?.trim() || null,
+          departmentId: input.departmentId,
+          startsAt: this.toDate(input.startsAt),
+          endsAt: this.toDate(input.endsAt),
           createdById: member.id,
           members: { create: { teamMemberId: member.id, role: ProjectRole.PROJECT_MANAGER } },
         },
@@ -55,7 +65,12 @@ export class ProjectsService {
           eventType: 'PROJECT_CREATED',
           entityType: 'PROJECT',
           entityId: created.id,
-          metadata: { name: created.name },
+          metadata: {
+            name: created.name,
+            departmentId: created.departmentId,
+            startsAt: created.startsAt?.toISOString() ?? null,
+            endsAt: created.endsAt?.toISOString() ?? null,
+          },
         },
       });
       return created;
@@ -82,6 +97,8 @@ export class ProjectsService {
           },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         },
+        department: { select: { id: true, name: true, slug: true, isActive: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
       },
     });
     if (!project) throw new NotFoundException('Project not found.');
@@ -90,12 +107,21 @@ export class ProjectsService {
 
   async update(userId: string, projectId: string, input: UpdateProjectDto) {
     const { member, project } = await this.requireProjectManager(userId, projectId);
+    const startsAt = input.startsAt === undefined ? project.startsAt : this.toDate(input.startsAt);
+    const endsAt = input.endsAt === undefined ? project.endsAt : this.toDate(input.endsAt);
+    this.validateProjectPeriod(startsAt?.toISOString(), endsAt?.toISOString());
+    if (input.departmentId !== undefined && input.departmentId !== project.departmentId) {
+      await this.requireActiveDepartment(input.departmentId);
+    }
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.project.updateMany({
         where: { id: project.id, version: project.version, archivedAt: null },
         data: {
           ...(input.name === undefined ? {} : { name: input.name.trim() }),
           ...(input.description === undefined ? {} : { description: input.description?.trim() || null }),
+          ...(input.departmentId === undefined ? {} : { departmentId: input.departmentId }),
+          ...(input.startsAt === undefined ? {} : { startsAt: this.toDate(input.startsAt) }),
+          ...(input.endsAt === undefined ? {} : { endsAt: this.toDate(input.endsAt) }),
           version: { increment: 1 },
         },
       });
@@ -109,8 +135,20 @@ export class ProjectsService {
           entityType: 'PROJECT',
           entityId: project.id,
           metadata: {
-            before: { name: project.name, description: project.description },
-            after: { name: fresh.name, description: fresh.description },
+            before: {
+              name: project.name,
+              description: project.description,
+              departmentId: project.departmentId,
+              startsAt: project.startsAt?.toISOString() ?? null,
+              endsAt: project.endsAt?.toISOString() ?? null,
+            },
+            after: {
+              name: fresh.name,
+              description: fresh.description,
+              departmentId: fresh.departmentId,
+              startsAt: fresh.startsAt?.toISOString() ?? null,
+              endsAt: fresh.endsAt?.toISOString() ?? null,
+            },
           },
         },
       });
@@ -327,6 +365,24 @@ export class ProjectsService {
     if (role !== TeamRole.SYSTEM_OWNER && role !== TeamRole.SYSTEM_ADMIN) {
       throw new ForbiddenException('Only a system administrator can create projects.');
     }
+  }
+
+  private async requireActiveDepartment(departmentId: string): Promise<void> {
+    const department = await this.prisma.department.findFirst({
+      where: { id: departmentId, isActive: true },
+      select: { id: true },
+    });
+    if (!department) throw new NotFoundException('Departemen aktif tidak ditemukan.');
+  }
+
+  private validateProjectPeriod(startsAt?: string | null, endsAt?: string | null): void {
+    if (startsAt && endsAt && new Date(startsAt).getTime() > new Date(endsAt).getTime()) {
+      throw new BadRequestException('Tanggal akhir proyek harus sama dengan atau setelah tanggal mulai.');
+    }
+  }
+
+  private toDate(value?: string | null): Date | null {
+    return value ? new Date(value) : null;
   }
 
   private toSlug(value: string): string {
