@@ -5,4 +5,5 @@ dist/
 !.env.example
 coverage/
 *.tsbuildinfo
+backups/
 .DS_Store
