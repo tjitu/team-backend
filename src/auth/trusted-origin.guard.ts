@@ -12,7 +12,7 @@ export class TrustedOriginGuard implements CanActivate {
     const configuredOrigin = process.env.TEAM_FRONTEND_ORIGIN;
     const requestOrigin = request.headers.origin;
     if (!configuredOrigin || !requestOrigin || !this.sameOrigin(configuredOrigin, requestOrigin)) {
-      throw new ForbiddenException('Sumber permintaan tidak diizinkan.');
+      throw new ForbiddenException('This request origin is not allowed.');
     }
     return true;
   }

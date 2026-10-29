@@ -24,6 +24,23 @@ export class UpdateMemberRoleDto {
   role!: TeamRole;
 }
 
+export class CreateTeamMemberDto {
+  @IsEmail()
+  @MaxLength(320)
+  email!: string;
+
+  @IsString()
+  @Length(2, 120)
+  name!: string;
+
+  @IsEnum(TeamRole)
+  role: TeamRole = TeamRole.MEMBER;
+
+  @IsString()
+  @Length(12, 72)
+  password!: string;
+}
+
 export class CreateInvitationDto {
   @IsEmail()
   @MaxLength(320)

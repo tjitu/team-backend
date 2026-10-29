@@ -21,12 +21,12 @@ export class SessionGuard implements CanActivate {
     const accessToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
 
     if (!accessToken) {
-      throw new UnauthorizedException('Sesi tidak ditemukan. Masuk dengan akun Supabase Anda.');
+      throw new UnauthorizedException('Session not found. Sign in with your Supabase account.');
     }
 
     const user = await this.authProvider.getUser(accessToken);
     if (!user) {
-      throw new UnauthorizedException('Sesi sudah berakhir. Masuk kembali dengan akun Supabase Anda.');
+      throw new UnauthorizedException('Your session has expired. Sign in again with your Supabase account.');
     }
 
     request.user = user;

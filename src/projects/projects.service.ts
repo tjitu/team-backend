@@ -412,12 +412,12 @@ export class ProjectsService {
       where: { id: departmentId, isActive: true },
       select: { id: true },
     });
-    if (!department) throw new NotFoundException('Departemen aktif tidak ditemukan.');
+    if (!department) throw new NotFoundException('Active department not found.');
   }
 
   private validateProjectPeriod(startsAt?: string | null, endsAt?: string | null): void {
     if (startsAt && endsAt && new Date(startsAt).getTime() > new Date(endsAt).getTime()) {
-      throw new BadRequestException('Tanggal akhir proyek harus sama dengan atau setelah tanggal mulai.');
+      throw new BadRequestException('The project end date must be on or after the start date.');
     }
   }
 

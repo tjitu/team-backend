@@ -16,7 +16,7 @@ export class SupabaseAuthProvider implements AuthProvider {
     const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
     if (!supabaseUrl || !publishableKey) {
-      throw new ServiceUnavailableException('Konfigurasi Supabase Auth belum lengkap. Hubungi administrator.');
+      throw new ServiceUnavailableException('Supabase Auth is not fully configured. Contact your administrator.');
     }
 
     let response: Response;
@@ -31,19 +31,19 @@ export class SupabaseAuthProvider implements AuthProvider {
         cache: 'no-store',
       });
     } catch {
-      throw new ServiceUnavailableException('Supabase Auth tidak dapat dihubungi. Periksa konfigurasi, lalu muat ulang.');
+      throw new ServiceUnavailableException('Supabase Auth could not be reached. Check the configuration and try again.');
     }
 
     if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) {
-      throw new ServiceUnavailableException('Supabase Auth gagal memverifikasi sesi. Coba lagi sebentar.');
+      throw new ServiceUnavailableException('Supabase Auth could not verify the session. Please try again shortly.');
     }
 
     let result: unknown;
     try {
       result = await response.json();
     } catch {
-      throw new ServiceUnavailableException('Supabase Auth memberikan respons yang tidak valid. Hubungi administrator.');
+      throw new ServiceUnavailableException('Supabase Auth returned an invalid response. Contact your administrator.');
     }
 
     const user = result && typeof result === 'object' ? result as SupabaseAuthUser : undefined;

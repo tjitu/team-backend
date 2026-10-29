@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import {
   ListMembersQueryDto,
+  CreateTeamMemberDto,
   UpdateMemberRoleDto,
   UpdateMemberStatusDto,
 } from './team-management.dto';
@@ -12,6 +13,11 @@ import { TeamMembersService } from './team-members.service';
 @UseGuards(SessionGuard)
 export class TeamMembersController {
   constructor(private readonly members: TeamMembersService) {}
+
+  @Post()
+  create(@Req() request: AuthenticatedRequest, @Body() input: CreateTeamMemberDto) {
+    return this.members.create(request.user.id, input);
+  }
 
   @Get()
   list(@Req() request: AuthenticatedRequest, @Query() query: ListMembersQueryDto) {

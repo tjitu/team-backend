@@ -1,15 +1,66 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ProjectRole, TeamRole } from '@prisma/client';
+import { ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, ProjectRole, TeamRole } from '@prisma/client';
+import { AUTH_USER_ADMIN_PROVIDER, AuthUserAdminProvider } from '../auth/auth-provider';
 import { PrismaService } from '../database/prisma.service';
 import { TeamAccessService } from '../team-access/team-access.service';
-import { ListMembersQueryDto, UpdateMemberRoleDto, UpdateMemberStatusDto } from './team-management.dto';
+import { CreateTeamMemberDto, ListMembersQueryDto, UpdateMemberRoleDto, UpdateMemberStatusDto } from './team-management.dto';
 
 @Injectable()
 export class TeamMembersService {
+  private readonly logger = new Logger(TeamMembersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly teamAccess: TeamAccessService,
+    @Inject(AUTH_USER_ADMIN_PROVIDER) private readonly authUsers: AuthUserAdminProvider,
   ) {}
+
+  async create(userId: string, input: CreateTeamMemberDto) {
+    const actor = await this.requireOwner(userId);
+    if (input.role === TeamRole.SYSTEM_OWNER) {
+      throw new ForbiddenException('System Owner access can only be assigned through the bootstrap process.');
+    }
+    const email = input.email.trim().toLowerCase();
+    const existing = await this.prisma.teamMember.findUnique({ where: { email } });
+    if (existing) throw new ConflictException('A Team member with this email already exists.');
+
+    const authUser = await this.authUsers.createUser({ email, password: input.password, name: input.name.trim() });
+    try {
+      const member = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.teamMember.create({
+          data: {
+            userId: authUser.id,
+            email: authUser.email.toLowerCase(),
+            name: input.name.trim(),
+            role: input.role,
+            isActive: true,
+          },
+        });
+        await tx.activityLog.create({
+          data: {
+            actorTeamMemberId: actor.id,
+            eventType: 'TEAM_MEMBER_CREATED',
+            entityType: 'TEAM_MEMBER',
+            entityId: created.id,
+            metadata: { email: created.email, role: created.role },
+          },
+        });
+        return created;
+      });
+      return this.publicMember(member);
+    } catch (error) {
+      try {
+        await this.authUsers.deleteUser(authUser.id);
+      } catch (cleanupError) {
+        const stack = cleanupError instanceof Error ? cleanupError.stack : String(cleanupError);
+        this.logger.error('Could not remove a Supabase Auth user after Team member creation failed.', stack);
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A Team member with this email already exists.');
+      }
+      throw error;
+    }
+  }
 
   async list(userId: string, query: ListMembersQueryDto) {
     await this.requireAdmin(userId);
