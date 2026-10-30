@@ -49,7 +49,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async listTryouts() {
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       SELECT "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
              "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
              "isPublic", "referralCode", "createdAt"
@@ -65,7 +65,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const start = new Date(input.scheduledStart);
     const end = new Date(input.scheduledEnd);
     const status = now > end.getTime() ? 'FINISHED' : now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       INSERT INTO public."TryOut" ("id", "title", "description", "solutionPrice", "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status", "isPublic", "referralCode")
       VALUES (${randomUUID()}, ${input.title}, ${input.description ?? null}, ${input.solutionPrice}, CAST(${input.batch} AS public."TryoutBatch"), ${new Date(input.releaseDate)}, ${start}, ${end}, CAST(${status} AS public."TryoutStatus"), ${input.isPublic ?? true}, ${input.referralCode || null})
       RETURNING "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status", "isPublic", "referralCode", "createdAt"
@@ -74,7 +74,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async updateTryout(id: string, input: TryoutInput) {
-    const existingRows = await this.database().$queryRaw<Array<{ scheduledStart: Date | null; scheduledEnd: Date | null; status: string }>>(Prisma.sql`
+    const existingRows = await this.query<Array<{ scheduledStart: Date | null; scheduledEnd: Date | null; status: string }>>(Prisma.sql`
       SELECT "scheduledStart", "scheduledEnd", "status"::text AS "status" FROM public."TryOut" WHERE "id" = ${id} LIMIT 1
     `);
     const existing = existingRows[0];
@@ -87,7 +87,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const now = Date.now();
     const scheduleChanged = input.scheduledStart !== undefined || input.scheduledEnd !== undefined;
     const status = end && now > end.getTime() ? 'FINISHED' : start && end && now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       UPDATE public."TryOut" SET
         "title" = COALESCE(${input.title ?? null}, "title"),
         "description" = CASE WHEN ${input.description !== undefined} THEN ${input.description ?? null} ELSE "description" END,
@@ -106,7 +106,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async listPackages() {
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       SELECT p."id", p."name", p."tokenAmount", p."price", p."isActive", p."createdAt", p."updatedAt",
              COUNT(pay."id")::int AS "paymentCount"
       FROM public."TokenPackage" p
@@ -118,7 +118,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async createPackage(input: Required<Pick<PackageInput, 'name' | 'tokenAmount' | 'price'>> & PackageInput) {
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       INSERT INTO public."TokenPackage" ("id", "name", "tokenAmount", "price", "isActive", "createdAt", "updatedAt")
       VALUES (${randomUUID()}, ${input.name}, ${input.tokenAmount}, ${input.price}, ${input.isActive ?? true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING "id", "name", "tokenAmount", "price", "isActive", "createdAt", "updatedAt"
@@ -142,7 +142,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
   async listUsers(search = '') {
     const pattern = `%${search.trim()}%`;
-    return this.database().$queryRaw(Prisma.sql`
+    return this.query(Prisma.sql`
       SELECT "id", "name", "email", "role"::text AS "role", "target", "tokenBalance", "createdAt"
       FROM public."user"
       WHERE ${search.trim() === ''} OR "name" ILIKE ${pattern} OR "email" ILIKE ${pattern}
@@ -152,7 +152,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async updateUser(id: string, input: ManagedUserInput) {
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       UPDATE public."user" SET
         "role" = CASE WHEN ${input.role !== undefined} THEN CAST(${input.role ?? 'USER'} AS public."Role") ELSE "role" END,
         "target" = CASE WHEN ${input.target !== undefined} THEN ${input.target ?? null} ELSE "target" END,
@@ -165,7 +165,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
   async listHiringApplications(search = '') {
     const pattern = `%${search.trim()}%`;
-    return this.database().$queryRaw(Prisma.sql`
+    return this.query(Prisma.sql`
       SELECT id, full_name AS "fullName", email, university, primary_role AS "primaryRole",
              primary_division AS "primaryDivision", status, admin_notes AS "adminNotes", created_at AS "createdAt"
       FROM public.hiring_applications
@@ -176,7 +176,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async updateHiringApplication(id: string, input: HiringApplicationInput) {
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       UPDATE public.hiring_applications SET
         status = COALESCE(${input.status ?? null}, status),
         admin_notes = CASE WHEN ${input.adminNotes !== undefined} THEN ${input.adminNotes ?? ''} ELSE admin_notes END,
@@ -197,5 +197,21 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       throw new ServiceUnavailableException('Jitu management database is not configured. Set JITU_CONTROL_CENTER_DATABASE_URL.');
     }
     return this.prisma;
+  }
+
+  private async query<T = unknown>(statement: Prisma.Sql): Promise<T> {
+    try {
+      return await this.database().$queryRaw<T>(statement);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientInitializationError ||
+        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P1001')
+      ) {
+        throw new ServiceUnavailableException(
+          'Jitu management database is unreachable. Check the host and credentials in JITU_CONTROL_CENTER_DATABASE_URL.',
+        );
+      }
+      throw error;
+    }
   }
 }
