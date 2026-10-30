@@ -16,9 +16,12 @@ export class TeamMembersService {
   ) {}
 
   async create(userId: string, input: CreateTeamMemberDto) {
-    const actor = await this.requireOwner(userId);
+    const actor = await this.requireAdmin(userId);
     if (input.role === TeamRole.SYSTEM_OWNER) {
       throw new ForbiddenException('System Owner access can only be assigned through the bootstrap process.');
+    }
+    if (input.role === TeamRole.SYSTEM_ADMIN && actor.role !== TeamRole.SYSTEM_OWNER) {
+      throw new ForbiddenException('Only the System Owner can create a System Admin account.');
     }
     const email = input.email.trim().toLowerCase();
     const existing = await this.prisma.teamMember.findUnique({ where: { email } });
