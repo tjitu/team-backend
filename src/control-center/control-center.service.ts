@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { TeamRole } from '@prisma/client';
 import { TeamAccessService } from '../team-access/team-access.service';
 import { REVENUE_DATA_SOURCE, RevenueDataSource } from './revenue-data-source';
-import { HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput } from './jitu-management.data-source';
+import { ArticleInput, HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput } from './jitu-management.data-source';
 import { VercelAnalyticsService } from './vercel-analytics.service';
 
 @Injectable()
@@ -112,6 +112,35 @@ export class ControlCenterService {
     const result = await this.jituManagement.updatePackage(id, input);
     if (!result) throw new NotFoundException('Package not found.');
     return result;
+  }
+
+  async listArticles(userId: string, search = '', status = '') {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listArticles(search, status);
+  }
+
+  async getArticle(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.getArticle(id);
+    if (!result) throw new NotFoundException('Article not found.');
+    return result;
+  }
+
+  async createArticle(userId: string, input: ArticleInput) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.createArticle(input);
+  }
+
+  async updateArticle(userId: string, id: string, input: ArticleInput) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.updateArticle(id, input);
+    if (!result) throw new NotFoundException('Article not found.');
+    return result;
+  }
+
+  async deleteArticle(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.deleteArticle(id);
   }
 
   private async requireAdministrator(userId: string) {

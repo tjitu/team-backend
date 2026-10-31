@@ -48,3 +48,32 @@ export class UpdatePackageControlDto {
   @IsInt() @Min(0) @IsOptional() price?: number;
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
+
+
+export class CreateArticleControlDto {
+  @IsString() @MinLength(2) title!: string;
+  @IsString() @IsOptional() slug?: string;
+  @IsString() @IsOptional() summary?: string;
+  @IsString() @MinLength(1) content!: string;
+  @IsString() @IsOptional() coverImageUrl?: string;
+  @IsString() @IsOptional() category?: string;
+  @IsString() @IsOptional() tags?: string;
+  @IsString() @IsOptional() authorName?: string;
+  @IsIn(['DRAFT', 'PUBLISHED', 'ARCHIVED']) @IsOptional() status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  @IsInt() @Min(1) @IsOptional() readTimeMinutes?: number;
+  @IsDateString() @IsOptional() publishedAt?: string;
+}
+
+export class UpdateArticleControlDto {
+  @IsString() @MinLength(2) @IsOptional() title?: string;
+  @IsString() @IsOptional() slug?: string;
+  @IsString() @IsOptional() summary?: string | null;
+  @IsString() @MinLength(1) @IsOptional() content?: string;
+  @IsString() @IsOptional() coverImageUrl?: string | null;
+  @IsString() @IsOptional() category?: string;
+  @IsString() @IsOptional() tags?: string;
+  @IsString() @IsOptional() authorName?: string;
+  @IsIn(['DRAFT', 'PUBLISHED', 'ARCHIVED']) @IsOptional() status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  @IsInt() @Min(1) @IsOptional() readTimeMinutes?: number;
+  @IsDateString() @IsOptional() publishedAt?: string | null;
+}

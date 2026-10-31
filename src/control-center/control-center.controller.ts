@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { CreatePackageControlDto, CreateTryoutControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateTryoutControlDto } from './control-center.dto';
+import { CreateArticleControlDto, CreatePackageControlDto, CreateTryoutControlDto, UpdateArticleControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateTryoutControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -85,5 +85,37 @@ export class ControlCenterController {
   @Patch('careers/applications/:id')
   updateCareerApplication(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: UpdateHiringApplicationDto) {
     return this.controlCenter.updateHiringApplication(request.user.id, id, body);
+  }
+  @Get('articles')
+  getArticles(
+    @Req() request: AuthenticatedRequest,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.controlCenter.listArticles(request.user.id, search, status);
+  }
+
+  @Get('articles/:id')
+  getArticle(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.getArticle(request.user.id, id);
+  }
+
+  @Post('articles')
+  createArticle(@Req() request: AuthenticatedRequest, @Body() body: CreateArticleControlDto) {
+    return this.controlCenter.createArticle(request.user.id, body);
+  }
+
+  @Patch('articles/:id')
+  updateArticle(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateArticleControlDto,
+  ) {
+    return this.controlCenter.updateArticle(request.user.id, id, body);
+  }
+
+  @Delete('articles/:id')
+  deleteArticle(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteArticle(request.user.id, id);
   }
 }

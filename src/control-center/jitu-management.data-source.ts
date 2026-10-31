@@ -25,6 +25,20 @@ export type PackageInput = {
 export type ManagedUserInput = { role?: 'USER' | 'ADMIN'; target?: string | null };
 export type HiringApplicationInput = { status?: 'SUBMITTED' | 'UNDER_REVIEW' | 'INTERVIEW' | 'ACCEPTED' | 'REJECTED'; adminNotes?: string };
 
+export type ArticleInput = {
+  title?: string;
+  slug?: string;
+  summary?: string | null;
+  content?: string;
+  coverImageUrl?: string | null;
+  category?: string;
+  tags?: string;
+  authorName?: string;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  readTimeMinutes?: number;
+  publishedAt?: string | null;
+};
+
 export const JITU_MANAGEMENT_DATA_SOURCE = Symbol('JITU_MANAGEMENT_DATA_SOURCE');
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -63,6 +77,11 @@ export interface JituManagementDataSource {
   updateUser(id: string, input: ManagedUserInput): Promise<unknown | null>;
   listHiringApplications(search?: string): Promise<unknown>;
   updateHiringApplication(id: string, input: HiringApplicationInput): Promise<unknown | null>;
+  listArticles(search?: string, status?: string): Promise<unknown>;
+  getArticle(id: string): Promise<unknown | null>;
+  createArticle(input: ArticleInput): Promise<unknown>;
+  updateArticle(id: string, input: ArticleInput): Promise<unknown | null>;
+  deleteArticle(id: string): Promise<boolean>;
 }
 
 @Injectable()
@@ -681,10 +700,16 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   async listHiringApplications(search = '') {
     const pattern = `%${search.trim()}%`;
     return this.query(Prisma.sql`
-      SELECT id, full_name AS "fullName", email, university, primary_role AS "primaryRole",
-             primary_division AS "primaryDivision", status, admin_notes AS "adminNotes", created_at AS "createdAt"
+      SELECT id, full_name AS "fullName", email, whatsapp, university, major,
+             academic_status AS "academicStatus", domicile, primary_role AS "primaryRole",
+             primary_division AS "primaryDivision", secondary_role AS "secondaryRole",
+             availability, start_date AS "startDate", cv_url AS "cvUrl", cv_file_name AS "cvFileName",
+             portfolio_url AS "portfolioUrl", linkedin_url AS "linkedinUrl",
+             experience_essay AS "experienceEssay", motivation_essay AS "motivationEssay",
+             referral_source AS "referralSource", commitment_agreed AS "commitmentAgreed",
+             status, admin_notes AS "adminNotes", created_at AS "createdAt", updated_at AS "updatedAt"
       FROM public.hiring_applications
-      WHERE ${search.trim() === ''} OR full_name ILIKE ${pattern} OR email ILIKE ${pattern}
+      WHERE ${search.trim() === ''} OR full_name ILIKE ${pattern} OR email ILIKE ${pattern} OR university ILIKE ${pattern} OR primary_role ILIKE ${pattern}
       ORDER BY created_at DESC
       LIMIT 200
     `);
@@ -697,10 +722,125 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         admin_notes = CASE WHEN ${input.adminNotes !== undefined} THEN ${input.adminNotes ?? ''} ELSE admin_notes END,
         updated_at = CURRENT_TIMESTAMP
       WHERE LOWER(id) = LOWER(${id})
-      RETURNING id, full_name AS "fullName", email, university, primary_role AS "primaryRole",
-                primary_division AS "primaryDivision", status, admin_notes AS "adminNotes", created_at AS "createdAt"
+      RETURNING id, full_name AS "fullName", email, whatsapp, university, major,
+                academic_status AS "academicStatus", domicile, primary_role AS "primaryRole",
+                primary_division AS "primaryDivision", secondary_role AS "secondaryRole",
+                availability, start_date AS "startDate", cv_url AS "cvUrl", cv_file_name AS "cvFileName",
+                portfolio_url AS "portfolioUrl", linkedin_url AS "linkedinUrl",
+                experience_essay AS "experienceEssay", motivation_essay AS "motivationEssay",
+                referral_source AS "referralSource", commitment_agreed AS "commitmentAgreed",
+                status, admin_notes AS "adminNotes", created_at AS "createdAt", updated_at AS "updatedAt"
     `);
     return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async listArticles(search = '', status = '') {
+    const pattern = `%${search.trim()}%`;
+    return this.query(Prisma.sql`
+      SELECT id, title, slug, summary, content, cover_image_url AS "coverImageUrl",
+             category, tags, author_name AS "authorName", status,
+             read_time_minutes AS "readTimeMinutes", views_count AS "viewsCount",
+             published_at AS "publishedAt", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM public.articles
+      WHERE (${search.trim() === ''} OR title ILIKE ${pattern} OR category ILIKE ${pattern} OR author_name ILIKE ${pattern} OR tags ILIKE ${pattern})
+        AND (${status.trim() === ''} OR status = ${status})
+      ORDER BY COALESCE(published_at, created_at) DESC
+      LIMIT 200
+    `);
+  }
+
+  async getArticle(id: string) {
+    const rows = await this.query<any[]>(Prisma.sql`
+      SELECT id, title, slug, summary, content, cover_image_url AS "coverImageUrl",
+             category, tags, author_name AS "authorName", status,
+             read_time_minutes AS "readTimeMinutes", views_count AS "viewsCount",
+             published_at AS "publishedAt", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM public.articles
+      WHERE id = ${id} OR slug = ${id}
+      LIMIT 1
+    `);
+    return rows[0] ?? null;
+  }
+
+  async createArticle(input: ArticleInput) {
+    const id = 'art-' + randomUUID().slice(0, 10);
+    const baseSlug = (input.slug || input.title || 'article')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    const slug = baseSlug || id;
+    const publishedAt = input.status === 'PUBLISHED'
+      ? (input.publishedAt ? new Date(input.publishedAt) : new Date())
+      : null;
+
+    const rows = await this.query(Prisma.sql`
+      INSERT INTO public.articles (
+        id, title, slug, summary, content, cover_image_url,
+        category, tags, author_name, status, read_time_minutes,
+        published_at, created_at, updated_at
+      ) VALUES (
+        ${id},
+        ${input.title ?? 'Untitled Article'},
+        ${slug},
+        ${input.summary ?? null},
+        ${input.content ?? ''},
+        ${input.coverImageUrl ?? null},
+        ${input.category ?? 'UTBK-SNBT'},
+        ${input.tags ?? ''},
+        ${input.authorName ?? 'Tim Jitu PTN'},
+        ${input.status ?? 'DRAFT'},
+        ${input.readTimeMinutes ?? 3},
+        ${publishedAt},
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      RETURNING id, title, slug, summary, content, cover_image_url AS "coverImageUrl",
+                category, tags, author_name AS "authorName", status,
+                read_time_minutes AS "readTimeMinutes", views_count AS "viewsCount",
+                published_at AS "publishedAt", created_at AS "createdAt", updated_at AS "updatedAt"
+    `);
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async updateArticle(id: string, input: ArticleInput) {
+    const publishedAt = input.status === 'PUBLISHED'
+      ? (input.publishedAt ? new Date(input.publishedAt) : new Date())
+      : input.status === 'DRAFT'
+        ? null
+        : undefined;
+
+    const rows = await this.query(Prisma.sql`
+      UPDATE public.articles SET
+        title = COALESCE(${input.title ?? null}, title),
+        slug = COALESCE(${input.slug ? input.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : null}, slug),
+        summary = CASE WHEN ${input.summary !== undefined} THEN ${input.summary ?? null} ELSE summary END,
+        content = COALESCE(${input.content ?? null}, content),
+        cover_image_url = CASE WHEN ${input.coverImageUrl !== undefined} THEN ${input.coverImageUrl ?? null} ELSE cover_image_url END,
+        category = COALESCE(${input.category ?? null}, category),
+        tags = CASE WHEN ${input.tags !== undefined} THEN ${input.tags ?? ''} ELSE tags END,
+        author_name = COALESCE(${input.authorName ?? null}, author_name),
+        status = COALESCE(${input.status ?? null}, status),
+        read_time_minutes = COALESCE(${input.readTimeMinutes ?? null}, read_time_minutes),
+        published_at = CASE
+          WHEN ${publishedAt !== undefined} THEN ${publishedAt}
+          ELSE published_at
+        END,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING id, title, slug, summary, content, cover_image_url AS "coverImageUrl",
+                category, tags, author_name AS "authorName", status,
+                read_time_minutes AS "readTimeMinutes", views_count AS "viewsCount",
+                published_at AS "publishedAt", created_at AS "createdAt", updated_at AS "updatedAt"
+    `);
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async deleteArticle(id: string) {
+    await this.query(Prisma.sql`
+      DELETE FROM public.articles WHERE id = ${id}
+    `);
+    return true;
   }
 
   async onModuleDestroy() {
