@@ -34,6 +34,7 @@ export type VercelAnalyticsData = {
     uniqueVisitors: number;
     activeUsers: number;
     pageViews: number;
+    revenue?: number;
   }>;
   visitorPerPage: Array<{
     id: string;

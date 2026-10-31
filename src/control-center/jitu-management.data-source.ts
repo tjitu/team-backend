@@ -251,6 +251,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       uniqueVisitors: number;
       activeUsers: number;
       pageViews: number;
+      revenue: number;
     }>>(Prisma.sql`
       WITH days AS (
         SELECT generate_series(
@@ -276,16 +277,26 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         FROM public."session"
         WHERE "createdAt" >= CURRENT_DATE - INTERVAL '13 days'
         GROUP BY 1
+      ),
+      pay AS (
+        SELECT
+          ("createdAt" AT TIME ZONE 'UTC')::date AS d,
+          COALESCE(SUM("amount"), 0)::bigint AS daily_revenue
+        FROM public."Payment"
+        WHERE status = 'PAID' AND "createdAt" >= CURRENT_DATE - INTERVAL '13 days'
+        GROUP BY 1
       )
       SELECT
         days.d AS "statDate",
         (COALESCE(pv.views, 0) + COALESCE(sess.sessions, 0))::int AS "visitors",
         (COALESCE(pv.uniq, 0) + COALESCE(sess.active_users, 0))::int AS "uniqueVisitors",
         COALESCE(sess.active_users, 0)::int AS "activeUsers",
-        COALESCE(pv.views, COALESCE(sess.sessions, 0))::int AS "pageViews"
+        COALESCE(pv.views, COALESCE(sess.sessions, 0))::int AS "pageViews",
+        COALESCE(pay.daily_revenue, 0)::int AS "revenue"
       FROM days
       LEFT JOIN pv ON pv.d = days.d
       LEFT JOIN sess ON sess.d = days.d
+      LEFT JOIN pay ON pay.d = days.d
       ORDER BY days.d ASC
     `);
 
@@ -381,6 +392,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         uniqueVisitors: d.uniqueVisitors,
         activeUsers: d.activeUsers,
         pageViews: d.pageViews,
+        revenue: Number(d.revenue ?? 0),
       };
     });
 
@@ -397,8 +409,19 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           visitorGrowthPct,
         };
 
-    const finalVisitorTrend =
+    const revenueByDate = new Map<string, number>();
+    dailyTrendRows.forEach((d) => {
+      const dt = new Date(d.statDate).toISOString().slice(0, 10);
+      revenueByDate.set(dt, Number(d.revenue ?? 0));
+    });
+
+    const rawTrend =
       vercelData && vercelData.visitorTrend.length > 0 ? vercelData.visitorTrend : visitorTrend;
+
+    const finalVisitorTrend = rawTrend.map((item) => ({
+      ...item,
+      revenue: revenueByDate.get(item.date) ?? item.revenue ?? 0,
+    }));
 
     const finalVisitorPerPage =
       vercelData && vercelData.visitorPerPage.length > 0 ? vercelData.visitorPerPage : visitorPerPage;
