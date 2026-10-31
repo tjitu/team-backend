@@ -139,7 +139,11 @@ export class VercelAnalyticsService {
   }
 
   private get teamId(): string | undefined {
-    return this.overrideTeamId || process.env.VERCEL_TEAM_ID || process.env.VERCEL_ORG_ID || 'team_AwXSFqNTh675u2W43i6HDQzY';
+    if (this.overrideTeamId !== null) {
+      return this.overrideTeamId.trim() ? this.overrideTeamId.trim() : undefined;
+    }
+    const envVal = process.env.VERCEL_TEAM_ID || process.env.VERCEL_ORG_ID;
+    return envVal?.trim() ? envVal.trim() : undefined;
   }
 
   isConfigured(): boolean {
@@ -156,51 +160,113 @@ export class VercelAnalyticsService {
     };
   }
 
-  async testAndSaveCredentials(input: { token: string; projectId: string; teamId?: string }): Promise<{ success: boolean; message: string; visitors?: number }> {
+  async testAndSaveCredentials(input: {
+    token: string;
+    projectId: string;
+    teamId?: string;
+  }): Promise<{ success: boolean; message: string; visitors?: number; workingScope?: string }> {
     const token = input.token.trim();
     const projectId = input.projectId.trim();
-    const teamId = input.teamId?.trim() || this.teamId;
+    const explicitTeamId = input.teamId?.trim() || undefined;
 
     if (!token || !projectId) {
       return { success: false, message: 'Both VERCEL_TOKEN and VERCEL_PROJECT_ID are required.' };
     }
 
-    const testUrl = new URL('https://api.vercel.com/v1/query/web-analytics/visits/count');
-    testUrl.searchParams.set('projectId', projectId);
-    if (teamId) testUrl.searchParams.set('teamId', teamId);
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
 
+    // Step 1: Verify token validity via Vercel User endpoint
+    let username = '';
     try {
-      const res = await fetch(testUrl.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
+      const userRes = await fetch('https://api.vercel.com/v2/user', { headers });
+      if (!userRes.ok) {
         return {
           success: false,
-          message: `Vercel API returned status ${res.status}: ${errText.slice(0, 150)}`,
+          message: `Vercel Token authentication failed (status ${userRes.status}). Please check that your token is valid and created at Vercel > Account Settings > Tokens.`,
         };
       }
+      const userJson = (await userRes.json()) as { user?: { username?: string; email?: string } };
+      username = userJson.user?.username || userJson.user?.email || 'authenticated user';
+    } catch (err) {
+      return {
+        success: false,
+        message: `Failed to reach Vercel API: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
 
-      const json = (await res.json()) as { data?: { visitors?: number; pageviews?: number } };
+    // Step 2: Fetch teams accessible to this token
+    let accessibleTeams: Array<{ id: string; slug: string; name?: string }> = [];
+    try {
+      const teamsRes = await fetch('https://api.vercel.com/v2/teams', { headers });
+      if (teamsRes.ok) {
+        const teamsJson = (await teamsRes.json()) as { teams?: Array<{ id: string; slug: string; name?: string }> };
+        accessibleTeams = teamsJson.teams || [];
+      }
+    } catch (_) {}
 
+    // Step 3: Candidate team scopes to test
+    // 1. Explicit team provided by user
+    // 2. Personal scope (undefined / no teamId)
+    // 3. Teams retrieved from user's account
+    const candidateScopes: Array<{ teamId?: string; label: string }> = [];
+    if (explicitTeamId) {
+      candidateScopes.push({ teamId: explicitTeamId, label: `team (${explicitTeamId})` });
+    }
+    candidateScopes.push({ teamId: undefined, label: `Personal Account (@${username})` });
+    for (const t of accessibleTeams) {
+      if (t.id !== explicitTeamId) {
+        candidateScopes.push({ teamId: t.id, label: `Team: ${t.name || t.slug} (${t.id})` });
+      }
+      if (t.slug !== explicitTeamId && t.slug !== t.id) {
+        candidateScopes.push({ teamId: t.slug, label: `Team Slug: ${t.slug}` });
+      }
+    }
+
+    let workingTeamId: string | undefined = undefined;
+    let workingLabel = '';
+    let visitorCount = 0;
+    let lastError = '';
+
+    for (const scope of candidateScopes) {
+      const testUrl = new URL('https://api.vercel.com/v1/query/web-analytics/visits/count');
+      testUrl.searchParams.set('projectId', projectId);
+      if (scope.teamId) testUrl.searchParams.set('teamId', scope.teamId);
+
+      try {
+        const res = await fetch(testUrl.toString(), { headers });
+        if (res.ok) {
+          const json = (await res.json()) as { data?: { visitors?: number; pageviews?: number } };
+          visitorCount = json.data?.visitors ?? 0;
+          workingTeamId = scope.teamId;
+          workingLabel = scope.label;
+          break;
+        } else {
+          const errText = await res.text().catch(() => '');
+          lastError = `Status ${res.status}: ${errText.slice(0, 150)}`;
+        }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+
+    if (workingLabel) {
       // Apply runtime overrides immediately
       this.overrideToken = token;
       this.overrideProjectId = projectId;
-      if (teamId) this.overrideTeamId = teamId;
+      this.overrideTeamId = workingTeamId ?? '';
       this.cache = null;
 
-      // Persist to .env file if available
+      // Persist to .env file
       try {
         const envPath = path.resolve(process.cwd(), '.env');
         if (fs.existsSync(envPath)) {
           let envContent = fs.readFileSync(envPath, 'utf8');
           envContent = this.upsertEnvKey(envContent, 'VERCEL_TOKEN', token);
           envContent = this.upsertEnvKey(envContent, 'VERCEL_PROJECT_ID', projectId);
-          if (teamId) envContent = this.upsertEnvKey(envContent, 'VERCEL_TEAM_ID', teamId);
+          envContent = this.upsertEnvKey(envContent, 'VERCEL_TEAM_ID', workingTeamId ?? '');
           fs.writeFileSync(envPath, envContent, 'utf8');
         }
       } catch (writeErr) {
@@ -209,15 +275,21 @@ export class VercelAnalyticsService {
 
       return {
         success: true,
-        message: 'Successfully authenticated with Vercel Web Analytics API!',
-        visitors: json.data?.visitors ?? 0,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        message: `Failed to reach Vercel API: ${err instanceof Error ? err.message : String(err)}`,
+        message: `Successfully connected to project '${projectId}' under ${workingLabel}! Found ${visitorCount} total visitors.`,
+        visitors: visitorCount,
+        workingScope: workingLabel,
       };
     }
+
+    // Step 4: If all candidates failed, provide detailed diagnostic
+    const teamListStr = accessibleTeams.length > 0
+      ? accessibleTeams.map((t) => `${t.name || t.slug} (${t.id})`).join(', ')
+      : 'None (Personal Account only)';
+
+    return {
+      success: false,
+      message: `Authenticated as @${username}, but cannot access project '${projectId}'. Reason: ${lastError || '403 Forbidden'}. Teams available to this token: ${teamListStr}. If this project is in your Personal Account, leave Team ID completely empty. Also ensure Web Analytics is enabled in Vercel under Project > Analytics.`,
+    };
   }
 
   private upsertEnvKey(content: string, key: string, val: string): string {

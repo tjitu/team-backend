@@ -5,12 +5,14 @@ import { ControlCenterService } from './control-center.service';
 import { JituPaymentRevenueSource } from './jitu-payment-revenue-source';
 import { REVENUE_DATA_SOURCE } from './revenue-data-source';
 import { JITU_MANAGEMENT_DATA_SOURCE, JituPostgresManagementDataSource } from './jitu-management.data-source';
+import { VercelAnalyticsService } from './vercel-analytics.service';
 
 @Module({
   imports: [TeamAccessModule],
   controllers: [ControlCenterController],
   providers: [
     ControlCenterService,
+    VercelAnalyticsService,
     JituPaymentRevenueSource,
     JituPostgresManagementDataSource,
     { provide: JITU_MANAGEMENT_DATA_SOURCE, useExisting: JituPostgresManagementDataSource },
