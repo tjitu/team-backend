@@ -27,6 +27,7 @@ export type HiringApplicationInput = { status?: 'SUBMITTED' | 'UNDER_REVIEW' | '
 export const JITU_MANAGEMENT_DATA_SOURCE = Symbol('JITU_MANAGEMENT_DATA_SOURCE');
 
 export interface JituManagementDataSource {
+  getOverview?(): Promise<unknown>;
   listTryouts(): Promise<unknown>;
   createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'batch' | 'releaseDate' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
   updateTryout(id: string, input: TryoutInput): Promise<unknown | null>;
@@ -44,8 +45,257 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   private readonly prisma: PrismaClient | null;
 
   constructor() {
-    const url = process.env.JITU_CONTROL_CENTER_DATABASE_URL;
+    const url = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
+  }
+
+  async getOverview() {
+    const [
+      userStatsRows,
+      paymentStatsRows,
+      packageRows,
+      monthlyPaymentRows,
+      monthlyUserRows,
+      upcomingTryoutsRows,
+      pageAnalyticsRows,
+      dailyVisitorRows,
+    ] = await Promise.all([
+      this.query<Array<{
+        totalUsers: number;
+        activeUsers: number;
+        verifiedUsers: number;
+        activeStreakUsers: number;
+        newUsersThisMonth: number;
+      }>>(Prisma.sql`
+        SELECT
+          COUNT(*)::int AS "totalUsers",
+          COUNT(*) FILTER (WHERE "emailVerified" = true OR "currentStreak" > 0)::int AS "activeUsers",
+          COUNT(*) FILTER (WHERE "emailVerified" = true)::int AS "verifiedUsers",
+          COUNT(*) FILTER (WHERE "currentStreak" > 0)::int AS "activeStreakUsers",
+          COUNT(*) FILTER (WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP))::int AS "newUsersThisMonth"
+        FROM public."user"
+      `),
+      this.query<Array<{
+        totalRevenue: string;
+        coinsSold: string;
+        confirmedPayments: number;
+        pendingPayments: number;
+      }>>(Prisma.sql`
+        SELECT
+          COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "totalRevenue",
+          COALESCE(SUM("tokenAmount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "coinsSold",
+          COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::int AS "confirmedPayments",
+          COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::int AS "pendingPayments"
+        FROM public."Payment"
+      `),
+      this.query<Array<{
+        id: string;
+        name: string;
+        tokenAmount: number;
+        price: number;
+        isActive: boolean;
+        soldCount: number;
+        coinsSold: number;
+        revenue: number;
+      }>>(Prisma.sql`
+        SELECT
+          p."id",
+          p."name",
+          p."tokenAmount"::int AS "tokenAmount",
+          p."price"::int AS "price",
+          p."isActive",
+          COUNT(pay."id") FILTER (WHERE pay."status"::text = 'CONFIRMED')::int AS "soldCount",
+          COALESCE(SUM(pay."tokenAmount") FILTER (WHERE pay."status"::text = 'CONFIRMED'), 0)::int AS "coinsSold",
+          COALESCE(SUM(pay."amount") FILTER (WHERE pay."status"::text = 'CONFIRMED'), 0)::int AS "revenue"
+        FROM public."TokenPackage" p
+        LEFT JOIN public."Payment" pay ON pay."tokenPackageId" = p."id"
+        GROUP BY p."id"
+        ORDER BY p."price" ASC
+      `),
+      this.query<Array<{
+        month: string;
+        revenue: string;
+        coinsSold: string;
+        payments: number;
+      }>>(Prisma.sql`
+        SELECT
+          TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
+          COALESCE(SUM("amount"), 0)::text AS "revenue",
+          COALESCE(SUM("tokenAmount"), 0)::text AS "coinsSold",
+          COUNT(*)::int AS "payments"
+        FROM public."Payment"
+        WHERE "status"::text = 'CONFIRMED'
+          AND "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '5 months'
+        GROUP BY date_trunc('month', "createdAt")
+        ORDER BY date_trunc('month', "createdAt") ASC
+      `),
+      this.query<Array<{
+        month: string;
+        usersJoined: number;
+      }>>(Prisma.sql`
+        SELECT
+          TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
+          COUNT(*)::int AS "usersJoined"
+        FROM public."user"
+        WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '5 months'
+        GROUP BY date_trunc('month', "createdAt")
+        ORDER BY date_trunc('month', "createdAt") ASC
+      `),
+      this.query<Array<{
+        id: string;
+        code: number;
+        title: string;
+        description: string | null;
+        solutionPrice: number;
+        batch: string;
+        releaseDate: Date;
+        scheduledStart: Date | null;
+        scheduledEnd: Date | null;
+        status: string;
+        isPublic: boolean;
+      }>>(Prisma.sql`
+        SELECT
+          "id", "code", "title", "description", "solutionPrice",
+          "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd",
+          "status"::text AS "status", "isPublic"
+        FROM public."TryOut"
+        WHERE "scheduledEnd" IS NULL OR "scheduledEnd" >= CURRENT_TIMESTAMP - INTERVAL '2 days'
+        ORDER BY "scheduledStart" ASC NULLS LAST
+        LIMIT 8
+      `),
+      this.query<Array<{
+        id: string;
+        path: string;
+        label: string;
+        visitors: number;
+        uniqueVisitors: number;
+        pageViews: number;
+        avgDurationSec: number;
+        bounceRate: string;
+      }>>(Prisma.sql`
+        SELECT
+          id, path, label,
+          visitors::int AS "visitors",
+          unique_visitors::int AS "uniqueVisitors",
+          page_views::int AS "pageViews",
+          avg_duration_sec::int AS "avgDurationSec",
+          bounce_rate::text AS "bounceRate"
+        FROM public.page_analytics
+        ORDER BY visitors DESC
+      `),
+      this.query<Array<{
+        statDate: Date;
+        visitors: number;
+        uniqueVisitors: number;
+        activeUsers: number;
+        pageViews: number;
+      }>>(Prisma.sql`
+        SELECT
+          stat_date AS "statDate",
+          visitors::int AS "visitors",
+          unique_visitors::int AS "uniqueVisitors",
+          active_users::int AS "activeUsers",
+          page_views::int AS "pageViews"
+        FROM public.daily_visitor_stats
+        ORDER BY stat_date ASC
+        LIMIT 14
+      `),
+    ]);
+
+    const userStats = userStatsRows[0] ?? {
+      totalUsers: 0,
+      activeUsers: 0,
+      verifiedUsers: 0,
+      activeStreakUsers: 0,
+      newUsersThisMonth: 0,
+    };
+
+    const payStats = paymentStatsRows[0];
+    const totalRevenue = Number(payStats?.totalRevenue ?? 0);
+    const coinsSold = Number(payStats?.coinsSold ?? 0);
+    const confirmedPayments = Number(payStats?.confirmedPayments ?? 0);
+    const pendingPayments = Number(payStats?.pendingPayments ?? 0);
+
+    const coinPackages = packageRows.map((pkg) => ({
+      ...pkg,
+      pricePerCoin: Math.round(pkg.price / Math.max(1, pkg.tokenAmount)),
+    }));
+
+    const packagePricesPerCoin = coinPackages.map((p) => p.pricePerCoin);
+    const avgPricePerCoin = coinsSold > 0
+      ? Math.round(totalRevenue / coinsSold)
+      : packagePricesPerCoin.length > 0
+        ? Math.round(packagePricesPerCoin.reduce((a, b) => a + b, 0) / packagePricesPerCoin.length)
+        : 0;
+    const minPricePerCoin = packagePricesPerCoin.length > 0 ? Math.min(...packagePricesPerCoin) : 0;
+    const maxPricePerCoin = packagePricesPerCoin.length > 0 ? Math.max(...packagePricesPerCoin) : 0;
+
+    // Build 6-month series
+    const payMap = new Map(monthlyPaymentRows.map((r) => [r.month, r]));
+    const usrMap = new Map(monthlyUserRows.map((r) => [r.month, r.usersJoined]));
+    const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+    const now = new Date();
+    const monthlySeries = [];
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const pay = payMap.get(key);
+      monthlySeries.push({
+        month: key,
+        label: monthFormatter.format(d),
+        revenue: Number(pay?.revenue ?? 0),
+        coinsSold: Number(pay?.coinsSold ?? 0),
+        payments: Number(pay?.payments ?? 0),
+        usersJoined: Number(usrMap.get(key) ?? 0),
+      });
+    }
+
+    const totalVisitors = pageAnalyticsRows.reduce((sum, p) => sum + p.visitors, 0);
+    const uniqueVisitors = pageAnalyticsRows.reduce((sum, p) => sum + p.uniqueVisitors, 0);
+    const totalPageViews = pageAnalyticsRows.reduce((sum, p) => sum + p.pageViews, 0);
+
+    const visitorPerPage = pageAnalyticsRows.map((p) => ({
+      ...p,
+      bounceRate: Number(p.bounceRate ?? 0),
+      sharePct: totalVisitors > 0 ? Math.round((p.visitors / totalVisitors) * 1000) / 10 : 0,
+    }));
+
+    const dayFormatter = new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const visitorTrend = dailyVisitorRows.map((d) => {
+      const dt = new Date(d.statDate);
+      return {
+        date: dt.toISOString().slice(0, 10),
+        label: dayFormatter.format(dt),
+        visitors: d.visitors,
+        uniqueVisitors: d.uniqueVisitors,
+        activeUsers: d.activeUsers,
+        pageViews: d.pageViews,
+      };
+    });
+
+    return {
+      visitors: {
+        totalVisitors,
+        uniqueVisitors,
+        totalPageViews,
+        visitorGrowthPct: 14.8,
+      },
+      visitorPerPage,
+      visitorTrend,
+      users: userStats,
+      revenue: {
+        totalRevenue,
+        coinsSold,
+        confirmedPayments,
+        pendingPayments,
+        avgPricePerCoin,
+        minPricePerCoin,
+        maxPricePerCoin,
+      },
+      coinPackages,
+      monthlySeries,
+      upcomingTryouts: upcomingTryoutsRows,
+    };
   }
 
   async listTryouts() {

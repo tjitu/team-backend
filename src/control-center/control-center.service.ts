@@ -12,6 +12,15 @@ export class ControlCenterService {
     @Inject(JITU_MANAGEMENT_DATA_SOURCE) private readonly jituManagement: JituManagementDataSource,
   ) {}
 
+  async getOverview(userId: string) {
+    // Allow any active team member to view the Overview analytics dashboard
+    await this.teamAccess.getActiveMember(userId);
+    if (!this.jituManagement.getOverview) {
+      return null;
+    }
+    return this.jituManagement.getOverview();
+  }
+
   async getRevenue(userId: string) {
     const member = await this.teamAccess.getActiveMember(userId);
     this.assertAdministrator(member.role);

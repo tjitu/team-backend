@@ -9,6 +9,11 @@ import { CreatePackageControlDto, CreateTryoutControlDto, UpdateHiringApplicatio
 export class ControlCenterController {
   constructor(private readonly controlCenter: ControlCenterService) {}
 
+  @Get('overview')
+  getOverview(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.getOverview(request.user.id);
+  }
+
   @Get('revenue')
   getRevenue(@Req() request: AuthenticatedRequest) {
     return this.controlCenter.getRevenue(request.user.id);

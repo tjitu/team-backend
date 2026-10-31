@@ -19,7 +19,7 @@ export class JituPaymentRevenueSource implements RevenueDataSource, OnModuleDest
   private readonly prisma: PrismaClient | null;
 
   constructor() {
-    const url = process.env.JITU_PURCHASES_DATABASE_URL;
+    const url = process.env.JITU_PURCHASES_DATABASE_URL || process.env.JITU_CONTROL_CENTER_DATABASE_URL;
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
 
