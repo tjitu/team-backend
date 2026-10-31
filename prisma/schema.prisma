@@ -145,6 +145,7 @@ model TeamTask {
   projectId             String?      @map("project_id")
   title                 String
   description           String?
+  attachments           String[]     @default([])
   status                TaskStatus   @default(TODO)
   priority              TaskPriority @default(NORMAL)
   dueAt                 DateTime?    @map("due_at")

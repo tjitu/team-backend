@@ -146,6 +146,7 @@ export class TasksService {
           projectId: null,
           title,
           description: input.description?.trim() || null,
+          attachments: input.attachments ?? [],
           priority: input.priority ?? TaskPriority.NORMAL,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
           createdByTeamMemberId: access.member.id,
@@ -195,6 +196,7 @@ export class TasksService {
         data: {
           ...(title === undefined ? {} : { title }),
           ...(input.description === undefined ? {} : { description: input.description?.trim() || null }),
+          ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
           ...(input.status === undefined ? {} : { status: input.status }),
           ...(input.priority === undefined ? {} : { priority: input.priority }),
           ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt ? new Date(input.dueAt) : null }),
@@ -304,6 +306,7 @@ export class TasksService {
           projectId,
           title,
           description: input.description?.trim() || null,
+          attachments: input.attachments ?? [],
           priority: input.priority ?? TaskPriority.NORMAL,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
           createdByTeamMemberId: access.member.id,
@@ -354,6 +357,7 @@ export class TasksService {
         data: {
           ...(title === undefined ? {} : { title }),
           ...(input.description === undefined ? {} : { description: input.description?.trim() || null }),
+          ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
           ...(input.status === undefined ? {} : { status: input.status }),
           ...(input.priority === undefined ? {} : { priority: input.priority }),
           ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt ? new Date(input.dueAt) : null }),

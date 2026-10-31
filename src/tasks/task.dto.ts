@@ -1,12 +1,14 @@
 import { Type } from 'class-transformer';
 import {
   ArrayUnique,
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
   Max,
   MaxLength,
@@ -69,6 +71,15 @@ export class CreateTaskDto {
   description?: string;
 
   @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { each: true })
+  attachments?: string[];
+
+  @IsOptional()
   @IsEnum(TaskPriority)
   priority?: TaskPriority;
 
@@ -98,6 +109,15 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(10_000)
   description?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { each: true })
+  attachments?: string[];
 
   @IsOptional()
   @IsEnum(TaskStatus)
