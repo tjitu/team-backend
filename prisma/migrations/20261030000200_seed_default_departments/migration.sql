@@ -4,7 +4,7 @@ SELECT
   seed."id", seed."name", seed."slug", seed."description", true, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM (VALUES
   ('seed-department-marketing', 'Marketing', 'marketing', 'Perencanaan dan pelaksanaan pemasaran JituPTN.'),
-  ('seed-department-ops', 'Ops', 'ops', 'Operasional dan koordinasi layanan JituPTN.'),
+  ('seed-department-ops', 'Product & Ops', 'product-ops', 'Manajemen produk, operasional, dan koordinasi layanan JituPTN.'),
   ('seed-department-engineering', 'Engineering', 'engineering', 'Pengembangan dan pemeliharaan produk JituPTN.')
 ) AS seed("id", "name", "slug", "description")
 WHERE NOT EXISTS (
