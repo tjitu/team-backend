@@ -283,7 +283,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           ("createdAt" AT TIME ZONE 'UTC')::date AS d,
           COALESCE(SUM("amount"), 0)::bigint AS daily_revenue
         FROM public."Payment"
-        WHERE status = 'PAID' AND "createdAt" >= CURRENT_DATE - INTERVAL '13 days'
+        WHERE "status"::text = 'CONFIRMED' AND "createdAt" >= CURRENT_DATE - INTERVAL '13 days'
         GROUP BY 1
       )
       SELECT

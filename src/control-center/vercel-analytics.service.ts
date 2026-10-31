@@ -126,10 +126,56 @@ export class VercelAnalyticsService {
   private cache: { data: VercelAnalyticsData; expiresAt: number } | null = null;
   private inFlight: Promise<VercelAnalyticsData | null> | null = null;
 
-  // Runtime overrides (set via UI or .env)
+  // Runtime overrides (set via UI, JSON storage, or .env)
   private overrideToken: string | null = null;
   private overrideProjectId: string | null = null;
   private overrideTeamId: string | null = null;
+
+  constructor() {
+    this.loadPersistedConfig();
+  }
+
+  private get configFilePath(): string {
+    return path.resolve(process.cwd(), 'vercel-analytics-config.json');
+  }
+
+  private loadPersistedConfig() {
+    try {
+      if (fs.existsSync(this.configFilePath)) {
+        const raw = fs.readFileSync(this.configFilePath, 'utf8');
+        const data = JSON.parse(raw);
+        if (data.token) {
+          this.overrideToken = data.token;
+          process.env.VERCEL_TOKEN = data.token;
+        }
+        if (data.projectId) {
+          this.overrideProjectId = data.projectId;
+          process.env.VERCEL_PROJECT_ID = data.projectId;
+        }
+        if (data.teamId !== undefined) {
+          this.overrideTeamId = data.teamId;
+          process.env.VERCEL_TEAM_ID = data.teamId;
+        }
+        this.logger.log(`Loaded persisted Vercel Web Analytics config for project: ${this.overrideProjectId}`);
+      }
+    } catch (e) {
+      this.logger.warn('Failed to load vercel-analytics-config.json', e);
+    }
+  }
+
+  private savePersistedConfig(token: string, projectId: string, teamId?: string) {
+    try {
+      const data = {
+        token,
+        projectId,
+        teamId: teamId ?? '',
+        updatedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(this.configFilePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+      this.logger.warn('Failed to save vercel-analytics-config.json', e);
+    }
+  }
 
   private get token(): string | undefined {
     return this.overrideToken || process.env.VERCEL_TOKEN || process.env.VERCEL_ANALYTICS_TOKEN;
@@ -161,14 +207,43 @@ export class VercelAnalyticsService {
     };
   }
 
+  disconnectCredentials() {
+    this.overrideToken = '';
+    this.overrideProjectId = '';
+    this.overrideTeamId = '';
+    process.env.VERCEL_TOKEN = '';
+    process.env.VERCEL_PROJECT_ID = '';
+    process.env.VERCEL_TEAM_ID = '';
+    this.cache = null;
+
+    try {
+      if (fs.existsSync(this.configFilePath)) {
+        fs.unlinkSync(this.configFilePath);
+      }
+    } catch (_) {}
+
+    try {
+      const envPath = path.resolve(process.cwd(), '.env');
+      if (fs.existsSync(envPath)) {
+        let envContent = fs.readFileSync(envPath, 'utf8');
+        envContent = this.upsertEnvKey(envContent, 'VERCEL_TOKEN', '');
+        envContent = this.upsertEnvKey(envContent, 'VERCEL_PROJECT_ID', '');
+        envContent = this.upsertEnvKey(envContent, 'VERCEL_TEAM_ID', '');
+        fs.writeFileSync(envPath, envContent, 'utf8');
+      }
+    } catch (_) {}
+
+    return { success: true, message: 'Vercel API credentials disconnected.' };
+  }
+
   async testAndSaveCredentials(input: {
-    token: string;
-    projectId: string;
+    token?: string;
+    projectId?: string;
     teamId?: string;
   }): Promise<{ success: boolean; message: string; visitors?: number; workingScope?: string }> {
-    const token = input.token.trim();
-    const projectId = input.projectId.trim();
-    const explicitTeamId = input.teamId?.trim() || undefined;
+    const token = input.token?.trim() || this.token?.trim() || '';
+    const projectId = input.projectId?.trim() || this.projectId?.trim() || '';
+    const explicitTeamId = input.teamId !== undefined ? (input.teamId.trim() || undefined) : this.teamId;
 
     if (!token || !projectId) {
       return { success: false, message: 'Both VERCEL_TOKEN and VERCEL_PROJECT_ID are required.' };
@@ -258,7 +333,13 @@ export class VercelAnalyticsService {
       this.overrideToken = token;
       this.overrideProjectId = projectId;
       this.overrideTeamId = workingTeamId ?? '';
+      process.env.VERCEL_TOKEN = token;
+      process.env.VERCEL_PROJECT_ID = projectId;
+      process.env.VERCEL_TEAM_ID = workingTeamId ?? '';
       this.cache = null;
+
+      // Persist to JSON config file
+      this.savePersistedConfig(token, projectId, workingTeamId);
 
       // Persist to .env file
       try {

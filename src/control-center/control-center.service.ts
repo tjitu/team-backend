@@ -28,9 +28,14 @@ export class ControlCenterService {
     return this.vercelAnalytics.getConfigStatus();
   }
 
-  async updateVercelConfig(userId: string, input: { token: string; projectId: string; teamId?: string }) {
+  async updateVercelConfig(userId: string, input: { token?: string; projectId?: string; teamId?: string }) {
     await this.requireAdministrator(userId);
     return this.vercelAnalytics.testAndSaveCredentials(input);
+  }
+
+  async disconnectVercelConfig(userId: string) {
+    await this.requireAdministrator(userId);
+    return this.vercelAnalytics.disconnectCredentials();
   }
 
   async getRevenue(userId: string) {

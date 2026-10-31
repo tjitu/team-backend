@@ -22,9 +22,14 @@ export class ControlCenterController {
   @Post('vercel-config')
   updateVercelConfig(
     @Req() request: AuthenticatedRequest,
-    @Body() body: { token: string; projectId: string; teamId?: string },
+    @Body() body: { token?: string; projectId?: string; teamId?: string },
   ) {
     return this.controlCenter.updateVercelConfig(request.user.id, body);
+  }
+
+  @Post('vercel-disconnect')
+  disconnectVercelConfig(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.disconnectVercelConfig(request.user.id);
   }
 
   @Get('revenue')
