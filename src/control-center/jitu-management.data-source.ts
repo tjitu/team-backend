@@ -26,6 +26,29 @@ export type HiringApplicationInput = { status?: 'SUBMITTED' | 'UNDER_REVIEW' | '
 
 export const JITU_MANAGEMENT_DATA_SOURCE = Symbol('JITU_MANAGEMENT_DATA_SOURCE');
 
+const ROUTE_LABELS: Record<string, string> = {
+  '/': 'Landing Page',
+  '/dashboard': 'Student Dashboard',
+  '/tryout': 'Tryout & CBT Arena',
+  '/daily-streak': 'Daily Question Streak',
+  '/daily': 'Daily Question Streak',
+  '/shop': 'Coin & Token Shop',
+  '/profile': 'Student Profile',
+  '/referral': 'Referral Program',
+  '/hiring': 'Careers & Recruitment',
+  '/careers': 'Careers Portal',
+  '/open-hiring': 'Open Hiring',
+  '/login': 'Sign In Page',
+  '/register': 'Registration Page',
+};
+
+function labelForPath(path: string): string {
+  if (ROUTE_LABELS[path]) return ROUTE_LABELS[path];
+  if (path.startsWith('/tryout/')) return 'Tryout Exam Session';
+  if (path.startsWith('/admin')) return 'Admin Console';
+  return path;
+}
+
 export interface JituManagementDataSource {
   getOverview?(): Promise<unknown>;
   listTryouts(): Promise<unknown>;
@@ -44,31 +67,30 @@ export interface JituManagementDataSource {
 export class JituPostgresManagementDataSource implements JituManagementDataSource, OnModuleDestroy {
   private readonly prisma: PrismaClient | null;
   private overviewInFlight: Promise<unknown> | null = null;
-  private overviewCache: { expiresAt: number; data: unknown } | null = null;
 
   constructor() {
     const rawUrl = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
-    const url = rawUrl
-      ? `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}connection_limit=1&pool_timeout=20`
-      : undefined;
+    let url = rawUrl;
+    if (url) {
+      // Use transaction pooler port 6543 to avoid session mode max client limits
+      if (url.includes('pooler.supabase.com:5432')) {
+        url = url.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543');
+      }
+      const sep = url.includes('?') ? '&' : '?';
+      if (!url.includes('pgbouncer=')) {
+        url = `${url}${sep}pgbouncer=true&connection_limit=2&pool_timeout=20`;
+      }
+    }
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
 
   async getOverview() {
-    if (this.overviewCache && Date.now() < this.overviewCache.expiresAt) {
-      return this.overviewCache.data;
-    }
     if (this.overviewInFlight) {
       return this.overviewInFlight;
     }
-    this.overviewInFlight = this.fetchOverviewData()
-      .then((data) => {
-        this.overviewCache = { data, expiresAt: Date.now() + 10_000 };
-        return data;
-      })
-      .finally(() => {
-        this.overviewInFlight = null;
-      });
+    this.overviewInFlight = this.fetchOverviewData().finally(() => {
+      this.overviewInFlight = null;
+    });
     return this.overviewInFlight;
   }
 
@@ -82,7 +104,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }>>(Prisma.sql`
       SELECT
         COUNT(*)::int AS "totalUsers",
-        COUNT(*) FILTER (WHERE "emailVerified" = true OR "currentStreak" > 0)::int AS "activeUsers",
+        (
+          SELECT COUNT(DISTINCT s."userId")::int
+          FROM public."session" s
+          WHERE s."expiresAt" > CURRENT_TIMESTAMP
+        ) AS "activeUsers",
         COUNT(*) FILTER (WHERE "emailVerified" = true)::int AS "verifiedUsers",
         COUNT(*) FILTER (WHERE "currentStreak" > 0)::int AS "activeStreakUsers",
         COUNT(*) FILTER (WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP))::int AS "newUsersThisMonth"
@@ -177,48 +203,89 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd",
         "status"::text AS "status", "isPublic"
       FROM public."TryOut"
-      WHERE "scheduledEnd" IS NULL OR "scheduledEnd" >= CURRENT_TIMESTAMP - INTERVAL '2 days'
-      ORDER BY "scheduledStart" ASC NULLS LAST
-      LIMIT 8
+      ORDER BY "scheduledStart" DESC NULLS LAST, "createdAt" DESC
+      LIMIT 10
     `);
 
-    const pageAnalyticsRows = await this.query<Array<{
-      id: string;
+    // Real visitor & pageview aggregation from public.page_visit_events + public."session"
+    const pageVisitRows = await this.query<Array<{
       path: string;
-      label: string;
       visitors: number;
       uniqueVisitors: number;
       pageViews: number;
       avgDurationSec: number;
-      bounceRate: string;
     }>>(Prisma.sql`
       SELECT
-        id, path, label,
-        visitors::int AS "visitors",
-        unique_visitors::int AS "uniqueVisitors",
-        page_views::int AS "pageViews",
-        avg_duration_sec::int AS "avgDurationSec",
-        bounce_rate::text AS "bounceRate"
-      FROM public.page_analytics
-      ORDER BY visitors DESC
+        path,
+        COUNT(*)::int AS "visitors",
+        COUNT(DISTINCT visitor_id)::int AS "uniqueVisitors",
+        COUNT(*)::int AS "pageViews",
+        COALESCE(ROUND(AVG(NULLIF(duration_sec, 0))), 0)::int AS "avgDurationSec"
+      FROM public.page_visit_events
+      GROUP BY path
+      ORDER BY COUNT(*) DESC
+      LIMIT 15
     `);
 
-    const dailyVisitorRows = await this.query<Array<{
+    const sessionFallbackStats = await this.query<Array<{
+      totalSessions: number;
+      uniqueSessionUsers: number;
+      recent7d: number;
+      prev7d: number;
+    }>>(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "totalSessions",
+        COUNT(DISTINCT COALESCE("ipAddress", "userId"))::int AS "uniqueSessionUsers",
+        COUNT(*) FILTER (WHERE "createdAt" >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "recent7d",
+        COUNT(*) FILTER (
+          WHERE "createdAt" >= CURRENT_TIMESTAMP - INTERVAL '14 days'
+            AND "createdAt" < CURRENT_TIMESTAMP - INTERVAL '7 days'
+        )::int AS "prev7d"
+      FROM public."session"
+    `);
+
+    const dailyTrendRows = await this.query<Array<{
       statDate: Date;
       visitors: number;
       uniqueVisitors: number;
       activeUsers: number;
       pageViews: number;
     }>>(Prisma.sql`
+      WITH days AS (
+        SELECT generate_series(
+          CURRENT_DATE - INTERVAL '13 days',
+          CURRENT_DATE,
+          INTERVAL '1 day'
+        )::date AS d
+      ),
+      pv AS (
+        SELECT
+          (visited_at AT TIME ZONE 'UTC')::date AS d,
+          COUNT(*)::int AS views,
+          COUNT(DISTINCT visitor_id)::int AS uniq
+        FROM public.page_visit_events
+        WHERE visited_at >= CURRENT_DATE - INTERVAL '13 days'
+        GROUP BY 1
+      ),
+      sess AS (
+        SELECT
+          ("createdAt" AT TIME ZONE 'UTC')::date AS d,
+          COUNT(*)::int AS sessions,
+          COUNT(DISTINCT "userId")::int AS active_users
+        FROM public."session"
+        WHERE "createdAt" >= CURRENT_DATE - INTERVAL '13 days'
+        GROUP BY 1
+      )
       SELECT
-        stat_date AS "statDate",
-        visitors::int AS "visitors",
-        unique_visitors::int AS "uniqueVisitors",
-        active_users::int AS "activeUsers",
-        page_views::int AS "pageViews"
-      FROM public.daily_visitor_stats
-      ORDER BY stat_date ASC
-      LIMIT 14
+        days.d AS "statDate",
+        (COALESCE(pv.views, 0) + COALESCE(sess.sessions, 0))::int AS "visitors",
+        (COALESCE(pv.uniq, 0) + COALESCE(sess.active_users, 0))::int AS "uniqueVisitors",
+        COALESCE(sess.active_users, 0)::int AS "activeUsers",
+        COALESCE(pv.views, COALESCE(sess.sessions, 0))::int AS "pageViews"
+      FROM days
+      LEFT JOIN pv ON pv.d = days.d
+      LEFT JOIN sess ON sess.d = days.d
+      ORDER BY days.d ASC
     `);
 
     const userStats = userStatsRows[0] ?? {
@@ -249,7 +316,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const minPricePerCoin = packagePricesPerCoin.length > 0 ? Math.min(...packagePricesPerCoin) : 0;
     const maxPricePerCoin = packagePricesPerCoin.length > 0 ? Math.max(...packagePricesPerCoin) : 0;
 
-    // Build 6-month series
+    // Build 6-month series from real database rows
     const payMap = new Map(monthlyPaymentRows.map((r) => [r.month, r]));
     const usrMap = new Map(monthlyUserRows.map((r) => [r.month, r.usersJoined]));
     const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
@@ -269,18 +336,42 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       });
     }
 
-    const totalVisitors = pageAnalyticsRows.reduce((sum, p) => sum + p.visitors, 0);
-    const uniqueVisitors = pageAnalyticsRows.reduce((sum, p) => sum + p.uniqueVisitors, 0);
-    const totalPageViews = pageAnalyticsRows.reduce((sum, p) => sum + p.pageViews, 0);
+    const pvTotalVisitors = pageVisitRows.reduce((sum, p) => sum + p.visitors, 0);
+    const pvUniqueVisitors = pageVisitRows.reduce((sum, p) => sum + p.uniqueVisitors, 0);
+    const pvTotalPageViews = pageVisitRows.reduce((sum, p) => sum + p.pageViews, 0);
 
-    const visitorPerPage = pageAnalyticsRows.map((p) => ({
-      ...p,
-      bounceRate: Number(p.bounceRate ?? 0),
-      sharePct: totalVisitors > 0 ? Math.round((p.visitors / totalVisitors) * 1000) / 10 : 0,
+    const sessStats = sessionFallbackStats[0] ?? {
+      totalSessions: 0,
+      uniqueSessionUsers: 0,
+      recent7d: 0,
+      prev7d: 0,
+    };
+
+    const totalVisitors = pvTotalVisitors > 0 ? pvTotalVisitors : sessStats.totalSessions;
+    const uniqueVisitors = pvUniqueVisitors > 0 ? pvUniqueVisitors : sessStats.uniqueSessionUsers;
+    const totalPageViews = pvTotalPageViews > 0 ? pvTotalPageViews : sessStats.totalSessions;
+
+    const visitorGrowthPct =
+      sessStats.prev7d > 0
+        ? Math.round(((sessStats.recent7d - sessStats.prev7d) / sessStats.prev7d) * 1000) / 10
+        : sessStats.recent7d > 0
+          ? 100
+          : 0;
+
+    const visitorPerPage = pageVisitRows.map((p) => ({
+      id: p.path,
+      path: p.path,
+      label: labelForPath(p.path),
+      visitors: p.visitors,
+      uniqueVisitors: p.uniqueVisitors,
+      pageViews: p.pageViews,
+      avgDurationSec: p.avgDurationSec,
+      bounceRate: 0,
+      sharePct: pvTotalVisitors > 0 ? Math.round((p.visitors / pvTotalVisitors) * 1000) / 10 : 0,
     }));
 
     const dayFormatter = new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-    const visitorTrend = dailyVisitorRows.map((d) => {
+    const visitorTrend = dailyTrendRows.map((d) => {
       const dt = new Date(d.statDate);
       return {
         date: dt.toISOString().slice(0, 10),
@@ -297,7 +388,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         totalVisitors,
         uniqueVisitors,
         totalPageViews,
-        visitorGrowthPct: 14.8,
+        visitorGrowthPct,
       },
       visitorPerPage,
       visitorTrend,
