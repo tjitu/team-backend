@@ -3,6 +3,7 @@ import { TeamRole } from '@prisma/client';
 import { TeamAccessService } from '../team-access/team-access.service';
 import { REVENUE_DATA_SOURCE, RevenueDataSource } from './revenue-data-source';
 import { HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput } from './jitu-management.data-source';
+import { VercelAnalyticsService } from './vercel-analytics.service';
 
 @Injectable()
 export class ControlCenterService {
@@ -10,6 +11,7 @@ export class ControlCenterService {
     private readonly teamAccess: TeamAccessService,
     @Inject(REVENUE_DATA_SOURCE) private readonly revenue: RevenueDataSource,
     @Inject(JITU_MANAGEMENT_DATA_SOURCE) private readonly jituManagement: JituManagementDataSource,
+    private readonly vercelAnalytics: VercelAnalyticsService,
   ) {}
 
   async getOverview(userId: string) {
@@ -19,6 +21,16 @@ export class ControlCenterService {
       return null;
     }
     return this.jituManagement.getOverview();
+  }
+
+  async getVercelStatus(userId: string) {
+    await this.teamAccess.getActiveMember(userId);
+    return this.vercelAnalytics.getConfigStatus();
+  }
+
+  async updateVercelConfig(userId: string, input: { token: string; projectId: string; teamId?: string }) {
+    await this.requireAdministrator(userId);
+    return this.vercelAnalytics.testAndSaveCredentials(input);
   }
 
   async getRevenue(userId: string) {

@@ -14,6 +14,19 @@ export class ControlCenterController {
     return this.controlCenter.getOverview(request.user.id);
   }
 
+  @Get('vercel-config')
+  getVercelConfig(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.getVercelStatus(request.user.id);
+  }
+
+  @Post('vercel-config')
+  updateVercelConfig(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: { token: string; projectId: string; teamId?: string },
+  ) {
+    return this.controlCenter.updateVercelConfig(request.user.id, body);
+  }
+
   @Get('revenue')
   getRevenue(@Req() request: AuthenticatedRequest) {
     return this.controlCenter.getRevenue(request.user.id);
