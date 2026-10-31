@@ -14,12 +14,15 @@ export class TeamAccessController {
 
   @Get()
   async getCurrentMember(@Req() request: AuthenticatedRequest) {
-    const member = await this.teamAccess.getActiveMember(request.user.id, request.user.name);
-    const departments = await this.prisma.teamMemberDepartment.findMany({
-      where: { teamMemberId: member.id, isActive: true, department: { isActive: true } },
-      select: { department: { select: { id: true, name: true, slug: true } } },
-      orderBy: { department: { name: 'asc' } },
-    });
+    // Membership and departments are independent lookups; run them together.
+    const [member, departments] = await Promise.all([
+      this.teamAccess.getActiveMember(request.user.id, request.user.name),
+      this.prisma.teamMemberDepartment.findMany({
+        where: { teamMember: { userId: request.user.id }, isActive: true, department: { isActive: true } },
+        select: { department: { select: { id: true, name: true, slug: true } } },
+        orderBy: { department: { name: 'asc' } },
+      }),
+    ]);
     return {
       id: member.id,
       userId: member.userId,

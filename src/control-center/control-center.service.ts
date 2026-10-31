@@ -30,12 +30,16 @@ export class ControlCenterService {
 
   async updateVercelConfig(userId: string, input: { token?: string; projectId?: string; teamId?: string }) {
     await this.requireAdministrator(userId);
-    return this.vercelAnalytics.testAndSaveCredentials(input);
+    const result = await this.vercelAnalytics.testAndSaveCredentials(input);
+    this.jituManagement.invalidateOverview?.();
+    return result;
   }
 
   async disconnectVercelConfig(userId: string) {
     await this.requireAdministrator(userId);
-    return this.vercelAnalytics.disconnectCredentials();
+    const result = await this.vercelAnalytics.disconnectCredentials();
+    this.jituManagement.invalidateOverview?.();
+    return result;
   }
 
   async getRevenue(userId: string) {

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, OnModuleDestroy, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, OnApplicationBootstrap, OnModuleDestroy, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { VercelAnalyticsService } from './vercel-analytics.service';
@@ -52,6 +52,7 @@ function labelForPath(path: string): string {
 
 export interface JituManagementDataSource {
   getOverview?(): Promise<unknown>;
+  invalidateOverview?(): void;
   listTryouts(): Promise<unknown>;
   createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'batch' | 'releaseDate' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
   updateTryout(id: string, input: TryoutInput): Promise<unknown | null>;
@@ -65,9 +66,14 @@ export interface JituManagementDataSource {
 }
 
 @Injectable()
-export class JituPostgresManagementDataSource implements JituManagementDataSource, OnModuleDestroy {
+export class JituPostgresManagementDataSource implements JituManagementDataSource, OnApplicationBootstrap, OnModuleDestroy {
   private readonly prisma: PrismaClient | null;
   private overviewInFlight: Promise<unknown> | null = null;
+  private overviewCache: { data: unknown; fetchedAt: number } | null = null;
+  /** Overview data younger than this is served directly from memory. */
+  private static readonly OVERVIEW_FRESH_MS = 60_000;
+  /** Older (but not ancient) data is served instantly while a background refresh runs. */
+  private static readonly OVERVIEW_STALE_MAX_MS = 15 * 60_000;
 
   constructor(@Optional() private readonly vercelAnalytics?: VercelAnalyticsService) {
     const rawUrl = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
@@ -77,26 +83,63 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       if (url.includes('pooler.supabase.com:5432')) {
         url = url.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543');
       }
-      const sep = url.includes('?') ? '&' : '?';
       if (!url.includes('pgbouncer=')) {
-        url = `${url}${sep}pgbouncer=true&connection_limit=2&pool_timeout=20`;
+        // The database is far away (~1.7s per round trip), so allow a few parallel
+        // connections through the transaction pooler instead of queueing every query.
+        url = url.replace(/([?&])connection_limit=\d+&?/, '$1').replace(/[?&]$/, '');
+        const sep = url.includes('?') ? '&' : '?';
+        url = `${url}${sep}pgbouncer=true&connection_limit=6&pool_timeout=20`;
       }
     }
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
 
+  onApplicationBootstrap() {
+    // Warm the overview cache so the first dashboard visit does not pay the full query cost.
+    if (this.prisma) void this.refreshOverview().catch(() => undefined);
+  }
+
   async getOverview() {
+    const cached = this.overviewCache;
+    const age = cached ? Date.now() - cached.fetchedAt : Infinity;
+    if (cached && age < JituPostgresManagementDataSource.OVERVIEW_FRESH_MS) {
+      return cached.data;
+    }
+    if (cached && age < JituPostgresManagementDataSource.OVERVIEW_STALE_MAX_MS) {
+      // Stale-while-revalidate: answer immediately, refresh in the background.
+      void this.refreshOverview().catch(() => undefined);
+      return cached.data;
+    }
+    return this.refreshOverview();
+  }
+
+  /** Drops cached overview data after writes that affect it (tryouts, packages, users, Vercel config). */
+  invalidateOverview() {
+    this.overviewCache = null;
+  }
+
+  private refreshOverview() {
     if (this.overviewInFlight) {
       return this.overviewInFlight;
     }
-    this.overviewInFlight = this.fetchOverviewData().finally(() => {
-      this.overviewInFlight = null;
-    });
+    this.overviewInFlight = this.fetchOverviewData()
+      .then((data) => {
+        this.overviewCache = { data, fetchedAt: Date.now() };
+        return data;
+      })
+      .finally(() => {
+        this.overviewInFlight = null;
+      });
     return this.overviewInFlight;
   }
 
   private async fetchOverviewData() {
-    const userStatsRows = await this.query<Array<{
+    // All queries are independent: run them concurrently (each round trip is slow).
+    const vercelPromise = this.vercelAnalytics?.isConfigured()
+      ? this.vercelAnalytics.getAnalytics().catch(() => null)
+      : Promise.resolve(null);
+
+    const userStatsPromise = this.query<Array<{
       totalUsers: number;
       activeUsers: number;
       verifiedUsers: number;
@@ -116,7 +159,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       FROM public."user"
     `);
 
-    const paymentStatsRows = await this.query<Array<{
+    const paymentStatsRowsPromise = this.query<Array<{
       totalRevenue: string;
       coinsSold: string;
       confirmedPayments: number;
@@ -130,7 +173,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       FROM public."Payment"
     `);
 
-    const packageRows = await this.query<Array<{
+    const packageRowsPromise = this.query<Array<{
       id: string;
       name: string;
       tokenAmount: number;
@@ -155,7 +198,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       ORDER BY p."price" ASC
     `);
 
-    const monthlyPaymentRows = await this.query<Array<{
+    const monthlyPaymentRowsPromise = this.query<Array<{
       month: string;
       revenue: string;
       coinsSold: string;
@@ -173,7 +216,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       ORDER BY date_trunc('month', "createdAt") ASC
     `);
 
-    const monthlyUserRows = await this.query<Array<{
+    const monthlyUserRowsPromise = this.query<Array<{
       month: string;
       usersJoined: number;
     }>>(Prisma.sql`
@@ -186,7 +229,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       ORDER BY date_trunc('month', "createdAt") ASC
     `);
 
-    const upcomingTryoutsRows = await this.query<Array<{
+    const upcomingTryoutsRowsPromise = this.query<Array<{
       id: string;
       code: number;
       title: string;
@@ -209,7 +252,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     `);
 
     // Real visitor & pageview aggregation from public.page_visit_events + public."session"
-    const pageVisitRows = await this.query<Array<{
+    const pageVisitRowsPromise = this.query<Array<{
       path: string;
       visitors: number;
       uniqueVisitors: number;
@@ -228,7 +271,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       LIMIT 15
     `);
 
-    const sessionFallbackStats = await this.query<Array<{
+    const sessionFallbackStatsPromise = this.query<Array<{
       totalSessions: number;
       uniqueSessionUsers: number;
       recent7d: number;
@@ -245,7 +288,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       FROM public."session"
     `);
 
-    const dailyTrendRows = await this.query<Array<{
+    const dailyTrendRowsPromise = this.query<Array<{
       statDate: Date;
       visitors: number;
       uniqueVisitors: number;
@@ -299,6 +342,30 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       LEFT JOIN pay ON pay.d = days.d
       ORDER BY days.d ASC
     `);
+
+    const [
+      userStatsRows,
+      paymentStatsRows,
+      packageRows,
+      monthlyPaymentRows,
+      monthlyUserRows,
+      upcomingTryoutsRows,
+      pageVisitRows,
+      sessionFallbackStats,
+      dailyTrendRows,
+      vercelData,
+    ] = await Promise.all([
+      userStatsPromise,
+      paymentStatsRowsPromise,
+      packageRowsPromise,
+      monthlyPaymentRowsPromise,
+      monthlyUserRowsPromise,
+      upcomingTryoutsRowsPromise,
+      pageVisitRowsPromise,
+      sessionFallbackStatsPromise,
+      dailyTrendRowsPromise,
+      vercelPromise,
+    ]);
 
     const userStats = userStatsRows[0] ?? {
       totalUsers: 0,
@@ -395,10 +462,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         revenue: Number(d.revenue ?? 0),
       };
     });
-
-    const vercelData = this.vercelAnalytics?.isConfigured()
-      ? await this.vercelAnalytics.getAnalytics()
-      : null;
 
     const visitors = vercelData
       ? vercelData.visitors
@@ -517,6 +580,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       VALUES (${randomUUID()}, ${input.title}, ${input.description ?? null}, ${input.solutionPrice}, CAST(${input.batch} AS public."TryoutBatch"), ${new Date(input.releaseDate)}, ${start}, ${end}, CAST(${status} AS public."TryoutStatus"), ${input.isPublic ?? true}, ${input.referralCode || null})
       RETURNING "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status", "isPublic", "referralCode", "createdAt"
     `);
+    this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
   }
 
@@ -549,6 +613,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE "id" = ${id}
       RETURNING "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status", "isPublic", "referralCode", "createdAt"
     `);
+    this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
   }
 
@@ -570,6 +635,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       VALUES (${randomUUID()}, ${input.name}, ${input.tokenAmount}, ${input.price}, ${input.isActive ?? true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING "id", "name", "tokenAmount", "price", "isActive", "createdAt", "updatedAt"
     `);
+    this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
   }
 
@@ -584,6 +650,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE "id" = ${id}
       RETURNING "id", "name", "tokenAmount", "price", "isActive", "createdAt", "updatedAt"
     `);
+    this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
   }
 
@@ -607,6 +674,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE "id" = ${id}
       RETURNING "id", "name", "email", "role"::text AS "role", "target", "tokenBalance", "createdAt"
     `);
+    this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
   }
 

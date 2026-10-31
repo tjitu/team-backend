@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Load relations with SQL joins (one round trip) instead of one query per include.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

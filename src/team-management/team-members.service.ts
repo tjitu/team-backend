@@ -112,7 +112,7 @@ export class TeamMembersService {
     }
     if (target.isActive === input.isActive) return this.publicMember(target);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       if (!input.isActive) {
         const managedProjects = await tx.projectMember.findMany({
           where: {
@@ -157,6 +157,8 @@ export class TeamMembersService {
       });
       return this.publicMember(updated);
     });
+    this.teamAccess.invalidate(target.userId);
+    return result;
   }
 
   async updateRole(userId: string, memberId: string, input: UpdateMemberRoleDto) {
@@ -171,7 +173,7 @@ export class TeamMembersService {
     }
     if (target.role === input.role) return this.publicMember(target);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.teamMember.update({ where: { id: target.id }, data: { role: input.role } });
       await tx.activityLog.create({
         data: {
@@ -184,6 +186,8 @@ export class TeamMembersService {
       });
       return this.publicMember(updated);
     });
+    this.teamAccess.invalidate(target.userId);
+    return result;
   }
 
   private async requireAdmin(userId: string) {
