@@ -369,7 +369,7 @@ export class ProjectsService {
 
   private async lockProject(tx: Prisma.TransactionClient, projectId: string): Promise<void> {
     await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT "id" FROM "team_platform"."projects" WHERE "id" = ${projectId} FOR UPDATE
+      SELECT "id" FROM "public"."projects" WHERE "id" = ${projectId} FOR UPDATE
     `;
   }
 

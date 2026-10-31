@@ -3,26 +3,21 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  schemas  = ["team_platform"]
 }
 
 enum TeamRole {
   SYSTEM_OWNER
   SYSTEM_ADMIN
   MEMBER
-
-  @@schema("team_platform")
 }
 
 enum ProjectRole {
   PROJECT_MANAGER
   MEMBER
   VIEWER
-
-  @@schema("team_platform")
 }
 
 enum TaskStatus {
@@ -30,8 +25,6 @@ enum TaskStatus {
   IN_PROGRESS
   BLOCKED
   DONE
-
-  @@schema("team_platform")
 }
 
 enum TaskPriority {
@@ -39,8 +32,6 @@ enum TaskPriority {
   NORMAL
   HIGH
   URGENT
-
-  @@schema("team_platform")
 }
 
 enum InvitationStatus {
@@ -49,8 +40,6 @@ enum InvitationStatus {
   FAILED
   ACCEPTED
   REVOKED
-
-  @@schema("team_platform")
 }
 
 model TeamMember {
@@ -74,7 +63,6 @@ model TeamMember {
   departmentAssignmentsMade TeamMemberDepartment[] @relation("DepartmentAssigner")
 
   @@map("team_members")
-  @@schema("team_platform")
 }
 
 model Project {
@@ -100,7 +88,6 @@ model Project {
   @@index([archivedAt, updatedAt])
   @@index([createdById])
   @@map("projects")
-  @@schema("team_platform")
 }
 
 model ProjectMember {
@@ -117,7 +104,6 @@ model ProjectMember {
   @@unique([projectId, teamMemberId])
   @@index([teamMemberId, isActive])
   @@map("project_members")
-  @@schema("team_platform")
 }
 
 model ActivityLog {
@@ -137,7 +123,6 @@ model ActivityLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorTeamMemberId])
   @@map("activity_logs")
-  @@schema("team_platform")
 }
 
 model TeamTask {
@@ -163,7 +148,6 @@ model TeamTask {
   @@index([projectId, archivedAt, updatedAt])
   @@index([createdByTeamMemberId, archivedAt])
   @@map("tasks")
-  @@schema("team_platform")
 }
 
 model TaskAssignee {
@@ -180,7 +164,6 @@ model TaskAssignee {
   @@index([teamMemberId, taskId])
   @@index([assignedByMemberId])
   @@map("task_assignees")
-  @@schema("team_platform")
 }
 
 model TaskComment {
@@ -196,7 +179,6 @@ model TaskComment {
   @@index([taskId, createdAt])
   @@index([authorMemberId])
   @@map("task_comments")
-  @@schema("team_platform")
 }
 
 model TeamInvitation {
@@ -217,7 +199,6 @@ model TeamInvitation {
   @@index([status, createdAt])
   @@index([createdByTeamMemberId])
   @@map("team_invitations")
-  @@schema("team_platform")
 }
 
 model Department {
@@ -234,7 +215,6 @@ model Department {
 
   @@index([isActive, name])
   @@map("departments")
-  @@schema("team_platform")
 }
 
 model TeamMemberDepartment {
@@ -253,5 +233,4 @@ model TeamMemberDepartment {
   @@index([teamMemberId, isActive])
   @@index([assignedByTeamMemberId])
   @@map("team_member_departments")
-  @@schema("team_platform")
 }

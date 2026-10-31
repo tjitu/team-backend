@@ -126,7 +126,7 @@ export class TeamMembersService {
         });
         for (const { projectId } of managedProjects) {
           await tx.$queryRaw<Array<{ id: string }>>`
-            SELECT "id" FROM "team_platform"."projects" WHERE "id" = ${projectId} FOR UPDATE
+            SELECT "id" FROM "public"."projects" WHERE "id" = ${projectId} FOR UPDATE
           `;
           const remainingManagers = await tx.projectMember.count({
             where: {
