@@ -71,7 +71,7 @@ export class TasksService {
   }
 
   async listStandalone(userId: string, query: ListTasksQueryDto) {
-    await this.getStandaloneAccess(userId);
+    const access = await this.getStandaloneAccess(userId);
     const dueFrom = query.dueFrom ? new Date(`${query.dueFrom.slice(0, 10)}T00:00:00.000Z`) : undefined;
     const dueTo = query.dueTo ? new Date(`${query.dueTo.slice(0, 10)}T23:59:59.999Z`) : undefined;
     if (dueFrom && dueTo && dueFrom > dueTo) throw new BadRequestException('The due date range is invalid.');
@@ -79,15 +79,16 @@ export class TasksService {
       where: {
         projectId: null,
         archivedAt: null,
+        ...this.standaloneVisibilityWhere(access.member.id, access.isAdmin),
         ...(query.status ? { status: query.status } : {}),
         ...(query.priority ? { priority: query.priority } : {}),
         ...(query.assigneeId ? { assignees: { some: { teamMemberId: query.assigneeId } } } : {}),
         ...(query.creatorId ? { createdByTeamMemberId: query.creatorId } : {}),
         ...(dueFrom || dueTo ? { dueAt: { ...(dueFrom ? { gte: dueFrom } : {}), ...(dueTo ? { lte: dueTo } : {}) } } : {}),
-        ...(query.q ? { OR: [
+        ...(query.q ? { AND: [{ OR: [
           { title: { contains: query.q.trim(), mode: 'insensitive' } },
           { description: { contains: query.q.trim(), mode: 'insensitive' } },
-        ] } : {}),
+        ] }] } : {}),
       },
       include: {
         assignees: { select: { teamMember: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } },
@@ -114,9 +115,14 @@ export class TasksService {
   }
 
   async getStandalone(userId: string, taskId: string) {
-    await this.getStandaloneAccess(userId);
+    const access = await this.getStandaloneAccess(userId);
     const task = await this.prisma.teamTask.findFirst({
-      where: { id: taskId, projectId: null, archivedAt: null },
+      where: {
+        id: taskId,
+        projectId: null,
+        archivedAt: null,
+        ...this.standaloneVisibilityWhere(access.member.id, access.isAdmin),
+      },
       include: {
         assignees: { include: { teamMember: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } },
         createdBy: { select: { id: true, name: true, email: true } },
@@ -247,7 +253,15 @@ export class TasksService {
 
   async addStandaloneComment(userId: string, taskId: string, input: CreateTaskCommentDto) {
     const access = await this.getStandaloneAccess(userId);
-    const task = await this.prisma.teamTask.findFirst({ where: { id: taskId, projectId: null, archivedAt: null }, select: { id: true } });
+    const task = await this.prisma.teamTask.findFirst({
+      where: {
+        id: taskId,
+        projectId: null,
+        archivedAt: null,
+        ...this.standaloneVisibilityWhere(access.member.id, access.isAdmin),
+      },
+      select: { id: true },
+    });
     if (!task) throw new NotFoundException('Standalone task not found.');
     const body = input.body.trim();
     if (!body) throw new BadRequestException('Comment cannot be empty.');
@@ -474,6 +488,17 @@ export class TasksService {
       member,
       isAdmin: member.role === TeamRole.SYSTEM_OWNER || member.role === TeamRole.SYSTEM_ADMIN,
     };
+  }
+
+  private standaloneVisibilityWhere(memberId: string, isAdmin: boolean): Prisma.TeamTaskWhereInput {
+    return isAdmin
+      ? {}
+      : {
+          OR: [
+            { createdByTeamMemberId: memberId },
+            { assignees: { some: { teamMemberId: memberId } } },
+          ],
+        };
   }
 
   private async assertWorkspaceAssignees(tx: Prisma.TransactionClient, teamMemberIds: string[]): Promise<void> {
