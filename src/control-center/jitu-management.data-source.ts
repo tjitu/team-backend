@@ -43,164 +43,183 @@ export interface JituManagementDataSource {
 @Injectable()
 export class JituPostgresManagementDataSource implements JituManagementDataSource, OnModuleDestroy {
   private readonly prisma: PrismaClient | null;
+  private overviewInFlight: Promise<unknown> | null = null;
+  private overviewCache: { expiresAt: number; data: unknown } | null = null;
 
   constructor() {
-    const url = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
+    const rawUrl = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
+    const url = rawUrl
+      ? `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}connection_limit=1&pool_timeout=20`
+      : undefined;
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
 
   async getOverview() {
-    const [
-      userStatsRows,
-      paymentStatsRows,
-      packageRows,
-      monthlyPaymentRows,
-      monthlyUserRows,
-      upcomingTryoutsRows,
-      pageAnalyticsRows,
-      dailyVisitorRows,
-    ] = await Promise.all([
-      this.query<Array<{
-        totalUsers: number;
-        activeUsers: number;
-        verifiedUsers: number;
-        activeStreakUsers: number;
-        newUsersThisMonth: number;
-      }>>(Prisma.sql`
-        SELECT
-          COUNT(*)::int AS "totalUsers",
-          COUNT(*) FILTER (WHERE "emailVerified" = true OR "currentStreak" > 0)::int AS "activeUsers",
-          COUNT(*) FILTER (WHERE "emailVerified" = true)::int AS "verifiedUsers",
-          COUNT(*) FILTER (WHERE "currentStreak" > 0)::int AS "activeStreakUsers",
-          COUNT(*) FILTER (WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP))::int AS "newUsersThisMonth"
-        FROM public."user"
-      `),
-      this.query<Array<{
-        totalRevenue: string;
-        coinsSold: string;
-        confirmedPayments: number;
-        pendingPayments: number;
-      }>>(Prisma.sql`
-        SELECT
-          COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "totalRevenue",
-          COALESCE(SUM("tokenAmount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "coinsSold",
-          COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::int AS "confirmedPayments",
-          COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::int AS "pendingPayments"
-        FROM public."Payment"
-      `),
-      this.query<Array<{
-        id: string;
-        name: string;
-        tokenAmount: number;
-        price: number;
-        isActive: boolean;
-        soldCount: number;
-        coinsSold: number;
-        revenue: number;
-      }>>(Prisma.sql`
-        SELECT
-          p."id",
-          p."name",
-          p."tokenAmount"::int AS "tokenAmount",
-          p."price"::int AS "price",
-          p."isActive",
-          COUNT(pay."id") FILTER (WHERE pay."status"::text = 'CONFIRMED')::int AS "soldCount",
-          COALESCE(SUM(pay."tokenAmount") FILTER (WHERE pay."status"::text = 'CONFIRMED'), 0)::int AS "coinsSold",
-          COALESCE(SUM(pay."amount") FILTER (WHERE pay."status"::text = 'CONFIRMED'), 0)::int AS "revenue"
-        FROM public."TokenPackage" p
-        LEFT JOIN public."Payment" pay ON pay."tokenPackageId" = p."id"
-        GROUP BY p."id"
-        ORDER BY p."price" ASC
-      `),
-      this.query<Array<{
-        month: string;
-        revenue: string;
-        coinsSold: string;
-        payments: number;
-      }>>(Prisma.sql`
-        SELECT
-          TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
-          COALESCE(SUM("amount"), 0)::text AS "revenue",
-          COALESCE(SUM("tokenAmount"), 0)::text AS "coinsSold",
-          COUNT(*)::int AS "payments"
-        FROM public."Payment"
-        WHERE "status"::text = 'CONFIRMED'
-          AND "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '5 months'
-        GROUP BY date_trunc('month', "createdAt")
-        ORDER BY date_trunc('month', "createdAt") ASC
-      `),
-      this.query<Array<{
-        month: string;
-        usersJoined: number;
-      }>>(Prisma.sql`
-        SELECT
-          TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
-          COUNT(*)::int AS "usersJoined"
-        FROM public."user"
-        WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '5 months'
-        GROUP BY date_trunc('month', "createdAt")
-        ORDER BY date_trunc('month', "createdAt") ASC
-      `),
-      this.query<Array<{
-        id: string;
-        code: number;
-        title: string;
-        description: string | null;
-        solutionPrice: number;
-        batch: string;
-        releaseDate: Date;
-        scheduledStart: Date | null;
-        scheduledEnd: Date | null;
-        status: string;
-        isPublic: boolean;
-      }>>(Prisma.sql`
-        SELECT
-          "id", "code", "title", "description", "solutionPrice",
-          "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd",
-          "status"::text AS "status", "isPublic"
-        FROM public."TryOut"
-        WHERE "scheduledEnd" IS NULL OR "scheduledEnd" >= CURRENT_TIMESTAMP - INTERVAL '2 days'
-        ORDER BY "scheduledStart" ASC NULLS LAST
-        LIMIT 8
-      `),
-      this.query<Array<{
-        id: string;
-        path: string;
-        label: string;
-        visitors: number;
-        uniqueVisitors: number;
-        pageViews: number;
-        avgDurationSec: number;
-        bounceRate: string;
-      }>>(Prisma.sql`
-        SELECT
-          id, path, label,
-          visitors::int AS "visitors",
-          unique_visitors::int AS "uniqueVisitors",
-          page_views::int AS "pageViews",
-          avg_duration_sec::int AS "avgDurationSec",
-          bounce_rate::text AS "bounceRate"
-        FROM public.page_analytics
-        ORDER BY visitors DESC
-      `),
-      this.query<Array<{
-        statDate: Date;
-        visitors: number;
-        uniqueVisitors: number;
-        activeUsers: number;
-        pageViews: number;
-      }>>(Prisma.sql`
-        SELECT
-          stat_date AS "statDate",
-          visitors::int AS "visitors",
-          unique_visitors::int AS "uniqueVisitors",
-          active_users::int AS "activeUsers",
-          page_views::int AS "pageViews"
-        FROM public.daily_visitor_stats
-        ORDER BY stat_date ASC
-        LIMIT 14
-      `),
-    ]);
+    if (this.overviewCache && Date.now() < this.overviewCache.expiresAt) {
+      return this.overviewCache.data;
+    }
+    if (this.overviewInFlight) {
+      return this.overviewInFlight;
+    }
+    this.overviewInFlight = this.fetchOverviewData()
+      .then((data) => {
+        this.overviewCache = { data, expiresAt: Date.now() + 10_000 };
+        return data;
+      })
+      .finally(() => {
+        this.overviewInFlight = null;
+      });
+    return this.overviewInFlight;
+  }
+
+  private async fetchOverviewData() {
+    const userStatsRows = await this.query<Array<{
+      totalUsers: number;
+      activeUsers: number;
+      verifiedUsers: number;
+      activeStreakUsers: number;
+      newUsersThisMonth: number;
+    }>>(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "totalUsers",
+        COUNT(*) FILTER (WHERE "emailVerified" = true OR "currentStreak" > 0)::int AS "activeUsers",
+        COUNT(*) FILTER (WHERE "emailVerified" = true)::int AS "verifiedUsers",
+        COUNT(*) FILTER (WHERE "currentStreak" > 0)::int AS "activeStreakUsers",
+        COUNT(*) FILTER (WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP))::int AS "newUsersThisMonth"
+      FROM public."user"
+    `);
+
+    const paymentStatsRows = await this.query<Array<{
+      totalRevenue: string;
+      coinsSold: string;
+      confirmedPayments: number;
+      pendingPayments: number;
+    }>>(Prisma.sql`
+      SELECT
+        COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "totalRevenue",
+        COALESCE(SUM("tokenAmount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "coinsSold",
+        COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::int AS "confirmedPayments",
+        COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::int AS "pendingPayments"
+      FROM public."Payment"
+    `);
+
+    const packageRows = await this.query<Array<{
+      id: string;
+      name: string;
+      tokenAmount: number;
+      price: number;
+      isActive: boolean;
+      soldCount: number;
+      coinsSold: number;
+      revenue: number;
+    }>>(Prisma.sql`
+      SELECT
+        p."id",
+        p."name",
+        p."tokenAmount"::int AS "tokenAmount",
+        p."price"::int AS "price",
+        p."isActive",
+        COUNT(pay."id") FILTER (WHERE pay."status"::text = 'CONFIRMED')::int AS "soldCount",
+        COALESCE(SUM(pay."tokenAmount") FILTER (WHERE pay."status"::text = 'CONFIRMED'), 0)::int AS "coinsSold",
+        COALESCE(SUM(pay."amount") FILTER (WHERE pay."status"::text = 'CONFIRMED'), 0)::int AS "revenue"
+      FROM public."TokenPackage" p
+      LEFT JOIN public."Payment" pay ON pay."tokenPackageId" = p."id"
+      GROUP BY p."id"
+      ORDER BY p."price" ASC
+    `);
+
+    const monthlyPaymentRows = await this.query<Array<{
+      month: string;
+      revenue: string;
+      coinsSold: string;
+      payments: number;
+    }>>(Prisma.sql`
+      SELECT
+        TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
+        COALESCE(SUM("amount"), 0)::text AS "revenue",
+        COALESCE(SUM("tokenAmount"), 0)::text AS "coinsSold",
+        COUNT(*)::int AS "payments"
+      FROM public."Payment"
+      WHERE "status"::text = 'CONFIRMED'
+        AND "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '5 months'
+      GROUP BY date_trunc('month', "createdAt")
+      ORDER BY date_trunc('month', "createdAt") ASC
+    `);
+
+    const monthlyUserRows = await this.query<Array<{
+      month: string;
+      usersJoined: number;
+    }>>(Prisma.sql`
+      SELECT
+        TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
+        COUNT(*)::int AS "usersJoined"
+      FROM public."user"
+      WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '5 months'
+      GROUP BY date_trunc('month', "createdAt")
+      ORDER BY date_trunc('month', "createdAt") ASC
+    `);
+
+    const upcomingTryoutsRows = await this.query<Array<{
+      id: string;
+      code: number;
+      title: string;
+      description: string | null;
+      solutionPrice: number;
+      batch: string;
+      releaseDate: Date;
+      scheduledStart: Date | null;
+      scheduledEnd: Date | null;
+      status: string;
+      isPublic: boolean;
+    }>>(Prisma.sql`
+      SELECT
+        "id", "code", "title", "description", "solutionPrice",
+        "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd",
+        "status"::text AS "status", "isPublic"
+      FROM public."TryOut"
+      WHERE "scheduledEnd" IS NULL OR "scheduledEnd" >= CURRENT_TIMESTAMP - INTERVAL '2 days'
+      ORDER BY "scheduledStart" ASC NULLS LAST
+      LIMIT 8
+    `);
+
+    const pageAnalyticsRows = await this.query<Array<{
+      id: string;
+      path: string;
+      label: string;
+      visitors: number;
+      uniqueVisitors: number;
+      pageViews: number;
+      avgDurationSec: number;
+      bounceRate: string;
+    }>>(Prisma.sql`
+      SELECT
+        id, path, label,
+        visitors::int AS "visitors",
+        unique_visitors::int AS "uniqueVisitors",
+        page_views::int AS "pageViews",
+        avg_duration_sec::int AS "avgDurationSec",
+        bounce_rate::text AS "bounceRate"
+      FROM public.page_analytics
+      ORDER BY visitors DESC
+    `);
+
+    const dailyVisitorRows = await this.query<Array<{
+      statDate: Date;
+      visitors: number;
+      uniqueVisitors: number;
+      activeUsers: number;
+      pageViews: number;
+    }>>(Prisma.sql`
+      SELECT
+        stat_date AS "statDate",
+        visitors::int AS "visitors",
+        unique_visitors::int AS "uniqueVisitors",
+        active_users::int AS "activeUsers",
+        page_views::int AS "pageViews"
+      FROM public.daily_visitor_stats
+      ORDER BY stat_date ASC
+      LIMIT 14
+    `);
 
     const userStats = userStatsRows[0] ?? {
       totalUsers: 0,
