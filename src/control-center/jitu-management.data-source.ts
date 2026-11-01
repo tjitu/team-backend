@@ -70,9 +70,11 @@ export interface JituManagementDataSource {
   listTryouts(): Promise<unknown>;
   createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'batch' | 'releaseDate' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
   updateTryout(id: string, input: TryoutInput): Promise<unknown | null>;
+  deleteTryout(id: string): Promise<unknown | null>;
   listPackages(): Promise<unknown>;
   createPackage(input: Required<Pick<PackageInput, 'name' | 'tokenAmount' | 'price'>> & PackageInput): Promise<unknown>;
   updatePackage(id: string, input: PackageInput): Promise<unknown | null>;
+  deletePackage(id: string): Promise<unknown | null>;
   listUsers(search?: string): Promise<unknown>;
   updateUser(id: string, input: ManagedUserInput): Promise<unknown | null>;
   listHiringApplications(search?: string): Promise<unknown>;
@@ -636,6 +638,35 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return Array.isArray(rows) ? rows[0] ?? null : null;
   }
 
+  async deleteTryout(id: string) {
+    const existingRows = await this.query<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM public."TryOut" WHERE "id" = ${id} LIMIT 1
+    `);
+    if (!existingRows[0]) return null;
+
+    const dependencyRows = await this.query<Array<{
+      hasAttempts: boolean;
+      hasUnlockedSolutions: boolean;
+      hasSubtests: boolean;
+    }>>(Prisma.sql`
+      SELECT
+        EXISTS (SELECT 1 FROM public."TryOutAttempt" WHERE "try_out_id" = ${id}) AS "hasAttempts",
+        EXISTS (SELECT 1 FROM public."UnlockedSolution" WHERE "tryOutId" = ${id}) AS "hasUnlockedSolutions",
+        EXISTS (SELECT 1 FROM public."Subtest" WHERE "try_out_id" = ${id}) AS "hasSubtests"
+    `);
+    const dependencies = dependencyRows[0];
+    if (dependencies?.hasAttempts || dependencies?.hasUnlockedSolutions || dependencies?.hasSubtests) {
+      throw new BadRequestException('This tryout has exam content or student history and cannot be deleted. Set it to private if you want to hide it.');
+    }
+
+    const rows = await this.query<Array<{ id: string; title: string }>>(Prisma.sql`
+      DELETE FROM public."TryOut" WHERE "id" = ${id} RETURNING "id", "title"
+    `);
+    if (!rows[0]) return null;
+    this.invalidateOverview();
+    return rows[0];
+  }
+
   async listPackages() {
     const rows = await this.query(Prisma.sql`
       SELECT p."id", p."name", p."tokenAmount", p."price", p."isActive", p."createdAt", p."updatedAt",
@@ -671,6 +702,29 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     `);
     this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async deletePackage(id: string) {
+    const existingRows = await this.query<Array<{ id: string; name: string; paymentCount: number }>>(Prisma.sql`
+      SELECT p."id", p."name", COUNT(pay."id")::int AS "paymentCount"
+      FROM public."TokenPackage" p
+      LEFT JOIN public."Payment" pay ON pay."tokenPackageId" = p."id"
+      WHERE p."id" = ${id}
+      GROUP BY p."id"
+      LIMIT 1
+    `);
+    const existing = existingRows[0];
+    if (!existing) return null;
+    if (existing.paymentCount > 0) {
+      throw new BadRequestException('This package has payment history and cannot be deleted. Deactivate it instead.');
+    }
+
+    const rows = await this.query<Array<{ id: string; name: string }>>(Prisma.sql`
+      DELETE FROM public."TokenPackage" WHERE "id" = ${id} RETURNING "id", "name"
+    `);
+    if (!rows[0]) return null;
+    this.invalidateOverview();
+    return rows[0];
   }
 
   async listUsers(search = '') {

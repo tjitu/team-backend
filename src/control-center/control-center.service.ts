@@ -70,6 +70,14 @@ export class ControlCenterService {
     return result;
   }
 
+  async deleteTryout(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.deleteTryout(id);
+    if (!result) throw new NotFoundException('Tryout not found.');
+    this.jituManagement.invalidateOverview?.();
+    return result;
+  }
+
   async listPackages(userId: string) {
     await this.requireAdministrator(userId);
     return this.jituManagement.listPackages();
@@ -111,6 +119,14 @@ export class ControlCenterService {
     await this.requireAdministrator(userId);
     const result = await this.jituManagement.updatePackage(id, input);
     if (!result) throw new NotFoundException('Package not found.');
+    return result;
+  }
+
+  async deletePackage(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.deletePackage(id);
+    if (!result) throw new NotFoundException('Package not found.');
+    this.jituManagement.invalidateOverview?.();
     return result;
   }
 

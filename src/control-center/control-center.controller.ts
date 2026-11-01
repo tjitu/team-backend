@@ -52,6 +52,11 @@ export class ControlCenterController {
     return this.controlCenter.updateTryout(request.user.id, id, body);
   }
 
+  @Delete('tryouts/:id')
+  deleteTryout(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteTryout(request.user.id, id);
+  }
+
   @Get('packages')
   getPackages(@Req() request: AuthenticatedRequest) {
     return this.controlCenter.listPackages(request.user.id);
@@ -65,6 +70,11 @@ export class ControlCenterController {
   @Patch('packages/:id')
   updatePackage(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: UpdatePackageControlDto) {
     return this.controlCenter.updatePackage(request.user.id, id, body);
+  }
+
+  @Delete('packages/:id')
+  deletePackage(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deletePackage(request.user.id, id);
   }
 
   @Get('users')
