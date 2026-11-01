@@ -7,3 +7,4 @@ coverage/
 *.tsbuildinfo
 backups/
 .DS_Store
+vercel-analytics-config.json
