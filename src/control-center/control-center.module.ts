@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TeamAccessModule } from '../team-access/team-access.module';
 import { ControlCenterController } from './control-center.controller';
+import { PublicArticlesController } from './public-articles.controller';
 import { ControlCenterService } from './control-center.service';
 import { JituPaymentRevenueSource } from './jitu-payment-revenue-source';
 import { REVENUE_DATA_SOURCE } from './revenue-data-source';
@@ -9,7 +10,7 @@ import { VercelAnalyticsService } from './vercel-analytics.service';
 
 @Module({
   imports: [TeamAccessModule],
-  controllers: [ControlCenterController],
+  controllers: [ControlCenterController, PublicArticlesController],
   providers: [
     ControlCenterService,
     VercelAnalyticsService,

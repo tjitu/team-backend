@@ -39,6 +39,25 @@ export type ArticleInput = {
   publishedAt?: string | null;
 };
 
+export interface PublishedArticleSummary {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string | null;
+  coverImageUrl: string | null;
+  category: string;
+  tags: string;
+  authorName: string;
+  readTimeMinutes: number;
+  viewsCount: number;
+  publishedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface PublishedArticle extends PublishedArticleSummary {
+  content: string;
+}
+
 export const JITU_MANAGEMENT_DATA_SOURCE = Symbol('JITU_MANAGEMENT_DATA_SOURCE');
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -81,6 +100,8 @@ export interface JituManagementDataSource {
   updateHiringApplication(id: string, input: HiringApplicationInput): Promise<unknown | null>;
   listArticles(search?: string, status?: string): Promise<unknown>;
   getArticle(id: string): Promise<unknown | null>;
+  listPublishedArticles(): Promise<PublishedArticleSummary[]>;
+  getPublishedArticleBySlug(slug: string): Promise<PublishedArticle | null>;
   createArticle(input: ArticleInput): Promise<unknown>;
   updateArticle(id: string, input: ArticleInput): Promise<unknown | null>;
   deleteArticle(id: string): Promise<boolean>;
@@ -801,6 +822,32 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       ORDER BY COALESCE(published_at, created_at) DESC
       LIMIT 200
     `);
+  }
+
+  async listPublishedArticles(): Promise<PublishedArticleSummary[]> {
+    return this.query(Prisma.sql`
+      SELECT id, title, slug, summary, cover_image_url AS "coverImageUrl",
+             category, tags, author_name AS "authorName",
+             read_time_minutes AS "readTimeMinutes", views_count AS "viewsCount",
+             published_at AS "publishedAt", created_at AS "createdAt"
+      FROM public.articles
+      WHERE status = 'PUBLISHED'
+      ORDER BY published_at DESC NULLS LAST, created_at DESC
+    `);
+  }
+
+  async getPublishedArticleBySlug(slug: string): Promise<PublishedArticle | null> {
+    const rows = await this.query<PublishedArticle[]>(Prisma.sql`
+      SELECT id, title, slug, summary, content,
+             cover_image_url AS "coverImageUrl", category, tags,
+             author_name AS "authorName", read_time_minutes AS "readTimeMinutes",
+             views_count AS "viewsCount", published_at AS "publishedAt",
+             created_at AS "createdAt"
+      FROM public.articles
+      WHERE slug = ${slug} AND status = 'PUBLISHED'
+      LIMIT 1
+    `);
+    return rows[0] ?? null;
   }
 
   async getArticle(id: string) {
