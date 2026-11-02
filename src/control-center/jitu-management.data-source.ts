@@ -105,6 +105,11 @@ export interface JituManagementDataSource {
   createArticle(input: ArticleInput): Promise<unknown>;
   updateArticle(id: string, input: ArticleInput): Promise<unknown | null>;
   deleteArticle(id: string): Promise<boolean>;
+  listTopics(): Promise<unknown>;
+  listQuestions(search?: string, subtest?: string, target?: string): Promise<unknown>;
+  createQuestion(input: any): Promise<unknown>;
+  updateQuestion(id: string, input: any): Promise<unknown>;
+  deleteQuestion(id: string): Promise<unknown>;
 }
 
 @Injectable()
@@ -120,19 +125,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   constructor(@Optional() private readonly vercelAnalytics?: VercelAnalyticsService) {
     const rawUrl = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
     let url = rawUrl;
-    if (url) {
-      // Use transaction pooler port 6543 to avoid session mode max client limits
-      if (url.includes('pooler.supabase.com:5432')) {
-        url = url.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543');
-      }
-      if (!url.includes('pgbouncer=')) {
-        // The database is far away (~1.7s per round trip), so allow a few parallel
-        // connections through the transaction pooler instead of queueing every query.
-        url = url.replace(/([?&])connection_limit=\d+&?/, '$1').replace(/[?&]$/, '');
-        const sep = url.includes('?') ? '&' : '?';
-        url = `${url}${sep}pgbouncer=true&connection_limit=6&pool_timeout=20`;
-      }
-    }
+
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
 
@@ -428,7 +421,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       pricePerCoin: Math.round(pkg.price / Math.max(1, pkg.tokenAmount)),
     }));
 
-    const packagePricesPerCoin = coinPackages.map((p) => p.pricePerCoin);
+    const pureCoinPackages = coinPackages.filter((p) => !p.name.toLowerCase().includes("pass"));
+    const packagePricesPerCoin = (pureCoinPackages.length > 0 ? pureCoinPackages : coinPackages).map((p) => p.pricePerCoin);
     const avgPricePerCoin = coinsSold > 0
       ? Math.round(totalRevenue / coinsSold)
       : packagePricesPerCoin.length > 0
@@ -436,6 +430,10 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         : 0;
     const minPricePerCoin = packagePricesPerCoin.length > 0 ? Math.min(...packagePricesPerCoin) : 0;
     const maxPricePerCoin = packagePricesPerCoin.length > 0 ? Math.max(...packagePricesPerCoin) : 0;
+
+    const passPackages = packageRows.filter((p) => p.name.toLowerCase().includes("pass"));
+    const passSold = passPackages.reduce((sum, p) => sum + p.soldCount, 0);
+    const passRevenue = passPackages.reduce((sum, p) => sum + p.revenue, 0);
 
     // Build 6-month series from real database rows
     const payMap = new Map(monthlyPaymentRows.map((r) => [r.month, r]));
@@ -588,6 +586,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       revenue: {
         totalRevenue,
         coinsSold,
+        passSold,
+        passRevenue,
         confirmedPayments,
         pendingPayments,
         avgPricePerCoin,
@@ -942,6 +942,177 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       DELETE FROM public.articles WHERE id = ${id}
     `);
     return true;
+  }
+
+  async listTopics() {
+    const rows = await this.query<Array<any>>(Prisma.sql`
+      SELECT t."id", t."subtest", t."title", t."slug", t."order",
+             json_agg(
+               json_build_object('id', s."id", 'title', s."title", 'slug', s."slug", 'order', s."order")
+               ORDER BY s."order" ASC
+             ) FILTER (WHERE s."id" IS NOT NULL) AS "subtopics"
+      FROM public."Topic" t
+      LEFT JOIN public."Subtopic" s ON s."topicId" = t."id"
+      GROUP BY t."id"
+      ORDER BY t."order" ASC, t."title" ASC
+    `);
+    return rows.map((t) => ({
+      ...t,
+      subtopics: t.subtopics || [],
+    }));
+  }
+
+  async listQuestions(search = '', subtest = '', target = '') {
+    const filterClauses: Prisma.Sql[] = [];
+    if (search && search.trim()) {
+      const like = `%${search.trim()}%`;
+      filterClauses.push(Prisma.sql`(q."content" ILIKE ${like} OR q."narration" ILIKE ${like})`);
+    }
+    if (subtest && subtest.trim()) {
+      filterClauses.push(Prisma.sql`q."subtest" = ${subtest.trim()}`);
+    }
+    if (target && target.trim()) {
+      filterClauses.push(Prisma.sql`q."target" = ${target.trim()}`);
+    }
+    const where = filterClauses.length > 0
+      ? Prisma.sql`WHERE ${Prisma.join(filterClauses, ' AND ')}`
+      : Prisma.empty;
+
+    const rows = await this.query<Array<any>>(Prisma.sql`
+      SELECT 
+        q."id", q."subtest", q."subtopic_id" AS "subtopicId", q."difficulty", q."type", 
+        q."target", q."narration", q."content", q."imageUrl", q."points",
+        q."createdAt", q."updatedAt",
+        s."title" AS "subtopicTitle",
+        t."title" AS "topicTitle",
+        (
+          SELECT json_agg(
+            json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
+            ORDER BY opt."order" ASC
+          )
+          FROM public."QuestionItem" opt
+          WHERE opt."question_id" = q."id"
+        ) AS "options",
+        (
+          SELECT json_build_object(
+            'id', sol."id", 'steps', sol."steps", 'staticContent', sol."staticContent",
+            'quickTrick', sol."quickTrick", 'keyFormula', sol."keyFormula", 'defaultView', sol."defaultView"
+          )
+          FROM public."QuestionSolution" sol
+          WHERE sol."questionId" = q."id"
+        ) AS "solution"
+      FROM public."Question" q
+      LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
+      LEFT JOIN public."Topic" t ON t."id" = s."topicId"
+      ${where}
+      ORDER BY q."createdAt" DESC
+      LIMIT 100
+    `);
+    return rows.map((r) => ({
+      ...r,
+      options: r.options || [],
+    }));
+  }
+
+  async createQuestion(input: any) {
+    const questionId = randomUUID();
+    const target = input.target || 'DRAFT';
+    const difficulty = input.difficulty || 'MEDIUM';
+    const rawType = input.type || 'PILIHAN_GANDA';
+    const type = rawType === 'MULTIPLE_CHOICE' ? 'PILIHAN_GANDA' : rawType;
+    const isTryoutOnly = target === 'FOR_TRYOUT';
+
+    await this.query(Prisma.sql`
+      INSERT INTO public."Question" (
+        "id", "subtest", "subtopic_id", "difficulty", "type", "target", 
+        "narration", "content", "imageUrl", "points", "isTryoutOnly", "createdAt", "updatedAt"
+      ) VALUES (
+        ${questionId}, ${input.subtest}, ${input.subtopicId || null}, ${difficulty}, 
+        CAST(${type} AS public."QuestionType"), ${target},
+        ${input.narration || null}, ${input.content}, ${input.imageUrl || null}, ${input.points || 1},
+        ${isTryoutOnly}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `);
+
+    if (Array.isArray(input.options) && input.options.length > 0) {
+      for (const opt of input.options) {
+        await this.query(Prisma.sql`
+          INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
+          VALUES (${randomUUID()}, ${questionId}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
+        `);
+      }
+    }
+
+    const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
+    if (stepsJson || input.quickTrick || input.staticExplanation) {
+      await this.query(Prisma.sql`
+        INSERT INTO public."QuestionSolution" (
+          "id", "questionId", "steps", "staticContent", "quickTrick", "keyFormula", "createdAt", "updatedAt"
+        ) VALUES (
+          ${randomUUID()}, ${questionId}, CAST(${stepsJson} AS jsonb), ${input.staticExplanation || null},
+          ${input.quickTrick || null}, ${input.keyFormula || null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+      `);
+    }
+
+    const result = await this.listQuestions(questionId);
+    return Array.isArray(result) ? result[0] : null;
+  }
+
+  async updateQuestion(id: string, input: any) {
+    const target = input.target;
+    const isTryoutOnly = target === 'FOR_TRYOUT';
+
+    await this.query(Prisma.sql`
+      UPDATE public."Question" SET
+        "subtest" = COALESCE(${input.subtest ?? null}, "subtest"),
+        "subtopic_id" = CASE WHEN ${input.subtopicId !== undefined} THEN ${input.subtopicId || null} ELSE "subtopic_id" END,
+        "difficulty" = COALESCE(${input.difficulty ?? null}, "difficulty"),
+        "type" = CASE WHEN ${input.type !== undefined} THEN CAST(${input.type === 'MULTIPLE_CHOICE' ? 'PILIHAN_GANDA' : input.type} AS public."QuestionType") ELSE "type" END,
+        "target" = COALESCE(${input.target ?? null}, "target"),
+        "narration" = CASE WHEN ${input.narration !== undefined} THEN ${input.narration || null} ELSE "narration" END,
+        "content" = COALESCE(${input.content ?? null}, "content"),
+        "imageUrl" = CASE WHEN ${input.imageUrl !== undefined} THEN ${input.imageUrl || null} ELSE "imageUrl" END,
+        "points" = COALESCE(${input.points ?? null}, "points"),
+        "isTryoutOnly" = CASE WHEN ${target !== undefined} THEN ${isTryoutOnly} ELSE "isTryoutOnly" END,
+        "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = ${id}
+    `);
+
+    if (Array.isArray(input.options)) {
+      await this.query(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
+      for (const opt of input.options) {
+        await this.query(Prisma.sql`
+          INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
+          VALUES (${randomUUID()}, ${id}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
+        `);
+      }
+    }
+
+    if (input.solutionSteps !== undefined || input.quickTrick !== undefined || input.staticExplanation !== undefined) {
+      const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
+      await this.query(Prisma.sql`
+        INSERT INTO public."QuestionSolution" ("id", "questionId", "steps", "staticContent", "quickTrick", "createdAt", "updatedAt")
+        VALUES (${randomUUID()}, ${id}, CAST(${stepsJson} AS jsonb), ${input.staticExplanation || null}, ${input.quickTrick || null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT ("questionId") DO UPDATE SET
+          "steps" = CASE WHEN ${stepsJson !== null} THEN CAST(${stepsJson} AS jsonb) ELSE "QuestionSolution"."steps" END,
+          "staticContent" = CASE WHEN ${input.staticExplanation !== undefined} THEN ${input.staticExplanation || null} ELSE "QuestionSolution"."staticContent" END,
+          "quickTrick" = CASE WHEN ${input.quickTrick !== undefined} THEN ${input.quickTrick || null} ELSE "QuestionSolution"."quickTrick" END,
+          "updatedAt" = CURRENT_TIMESTAMP
+      `);
+    }
+
+    const result = await this.listQuestions(id);
+    return Array.isArray(result) ? result[0] : null;
+  }
+
+  async deleteQuestion(id: string) {
+    await this.query(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
+    await this.query(Prisma.sql`DELETE FROM public."QuestionSolution" WHERE "questionId" = ${id}`);
+    const rows = await this.query<Array<any>>(Prisma.sql`
+      DELETE FROM public."Question" WHERE "id" = ${id} RETURNING "id"
+    `);
+    return rows[0] || null;
   }
 
   async onModuleDestroy() {
