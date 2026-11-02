@@ -77,3 +77,51 @@ export class UpdateArticleControlDto {
   @IsInt() @Min(1) @IsOptional() readTimeMinutes?: number;
   @IsDateString() @IsOptional() publishedAt?: string | null;
 }
+
+
+export class CreateQuestionOptionDto {
+  @IsString() content!: string;
+  @IsBoolean() isCorrect!: boolean;
+  @IsInt() @Min(1) order!: number;
+}
+
+export class CreateSolutionStepDto {
+  @IsInt() stepNumber!: number;
+  @IsString() @IsOptional() category?: string;
+  @IsString() title!: string;
+  @IsString() content!: string;
+}
+
+export class CreateQuestionControlDto {
+  @IsString() subtest!: string;
+  @IsString() @IsOptional() subtopicId?: string;
+  @IsIn(['EASY', 'MEDIUM', 'HARD']) @IsOptional() difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+  @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER']) @IsOptional() type?: string;
+  @IsIn(['DRAFT', 'FOR_TRYOUT', 'FOR_PRACTICE']) @IsOptional() target?: 'DRAFT' | 'FOR_TRYOUT' | 'FOR_PRACTICE';
+  @IsString() @IsOptional() narration?: string;
+  @IsString() @MinLength(1) content!: string;
+  @IsString() @IsOptional() imageUrl?: string;
+  @IsInt() @Min(1) @IsOptional() points?: number;
+  
+  @IsOptional() options?: CreateQuestionOptionDto[];
+  @IsOptional() solutionSteps?: CreateSolutionStepDto[];
+  @IsString() @IsOptional() quickTrick?: string;
+  @IsString() @IsOptional() staticExplanation?: string;
+}
+
+export class UpdateQuestionControlDto {
+  @IsString() @IsOptional() subtest?: string;
+  @IsString() @IsOptional() subtopicId?: string | null;
+  @IsIn(['EASY', 'MEDIUM', 'HARD']) @IsOptional() difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+  @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER']) @IsOptional() type?: string;
+  @IsIn(['DRAFT', 'FOR_TRYOUT', 'FOR_PRACTICE']) @IsOptional() target?: 'DRAFT' | 'FOR_TRYOUT' | 'FOR_PRACTICE';
+  @IsString() @IsOptional() narration?: string | null;
+  @IsString() @IsOptional() content?: string;
+  @IsString() @IsOptional() imageUrl?: string | null;
+  @IsInt() @Min(1) @IsOptional() points?: number;
+  
+  @IsOptional() options?: CreateQuestionOptionDto[];
+  @IsOptional() solutionSteps?: CreateSolutionStepDto[];
+  @IsString() @IsOptional() quickTrick?: string | null;
+  @IsString() @IsOptional() staticExplanation?: string | null;
+}

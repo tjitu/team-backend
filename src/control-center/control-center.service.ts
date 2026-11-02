@@ -159,6 +159,35 @@ export class ControlCenterService {
     return this.jituManagement.deleteArticle(id);
   }
 
+  async listTopics(userId: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listTopics();
+  }
+
+  async listQuestions(userId: string, search = '', subtest = '', target = '') {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listQuestions(search, subtest, target);
+  }
+
+  async createQuestion(userId: string, input: any) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.createQuestion(input);
+  }
+
+  async updateQuestion(userId: string, id: string, input: any) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.updateQuestion(id, input);
+    if (!result) throw new NotFoundException('Question not found.');
+    return result;
+  }
+
+  async deleteQuestion(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.deleteQuestion(id);
+    if (!result) throw new NotFoundException('Question not found.');
+    return result;
+  }
+
   private async requireAdministrator(userId: string) {
     const member = await this.teamAccess.getActiveMember(userId);
     this.assertAdministrator(member.role);

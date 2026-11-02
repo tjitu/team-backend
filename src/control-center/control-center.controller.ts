@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { CreateArticleControlDto, CreatePackageControlDto, CreateTryoutControlDto, UpdateArticleControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateTryoutControlDto } from './control-center.dto';
+import { CreateArticleControlDto, CreatePackageControlDto, CreateTryoutControlDto, UpdateArticleControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateTryoutControlDto, CreateQuestionControlDto, UpdateQuestionControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -127,5 +127,39 @@ export class ControlCenterController {
   @Delete('articles/:id')
   deleteArticle(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
     return this.controlCenter.deleteArticle(request.user.id, id);
+  }
+
+  @Get('topics')
+  getTopics(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.listTopics(request.user.id);
+  }
+
+  @Get('questions')
+  getQuestions(
+    @Req() request: AuthenticatedRequest,
+    @Query('search') search?: string,
+    @Query('subtest') subtest?: string,
+    @Query('target') target?: string,
+  ) {
+    return this.controlCenter.listQuestions(request.user.id, search, subtest, target);
+  }
+
+  @Post('questions')
+  createQuestion(@Req() request: AuthenticatedRequest, @Body() body: CreateQuestionControlDto) {
+    return this.controlCenter.createQuestion(request.user.id, body);
+  }
+
+  @Patch('questions/:id')
+  updateQuestion(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateQuestionControlDto,
+  ) {
+    return this.controlCenter.updateQuestion(request.user.id, id, body);
+  }
+
+  @Delete('questions/:id')
+  deleteQuestion(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteQuestion(request.user.id, id);
   }
 }
