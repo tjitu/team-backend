@@ -24,6 +24,17 @@ export type PackageInput = {
 
 export type ManagedUserInput = { role?: 'USER' | 'ADMIN'; target?: string | null; isBanned?: boolean };
 export type HiringApplicationInput = { status?: 'SUBMITTED' | 'UNDER_REVIEW' | 'INTERVIEW' | 'ACCEPTED' | 'REJECTED'; adminNotes?: string };
+export type DiscountInput = {
+  name: string;
+  type: 'PERCENTAGE' | 'FIXED';
+  value: number;
+  startDate: string;
+  endDate: string;
+  packageId?: string | null;
+  badgeText?: string;
+  badgeStyle?: string;
+  isActive?: boolean;
+};
 
 export type ArticleInput = {
   title?: string;
@@ -109,10 +120,20 @@ export interface JituManagementDataSource {
   updateArticle(id: string, input: ArticleInput): Promise<unknown | null>;
   deleteArticle(id: string): Promise<boolean>;
   listTopics(): Promise<unknown>;
+  createTopic(input: any): Promise<unknown>;
+  updateTopic(id: string, input: any): Promise<unknown>;
+  deleteTopic(id: string): Promise<unknown>;
+  createSubtopic(input: any): Promise<unknown>;
+  updateSubtopic(id: string, input: any): Promise<unknown>;
+  deleteSubtopic(id: string): Promise<unknown>;
   listQuestions(search?: string, subtest?: string, target?: string): Promise<unknown>;
   createQuestion(input: any): Promise<unknown>;
   updateQuestion(id: string, input: any): Promise<unknown>;
   deleteQuestion(id: string): Promise<unknown>;
+  listDiscounts(): Promise<unknown>;
+  createDiscount(input: DiscountInput): Promise<unknown>;
+  updateDiscount(id: string, input: Partial<DiscountInput>): Promise<unknown | null>;
+  deleteDiscount(id: string): Promise<unknown | null>;
 }
 
 @Injectable()
@@ -754,6 +775,100 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return rows[0];
   }
 
+  private discountTableEnsured = false;
+  private async ensureDiscountTable() {
+    if (this.discountTableEnsured) return;
+    try {
+      await this.query(Prisma.sql`
+        CREATE TABLE IF NOT EXISTS public."Discount" (
+          "id" TEXT PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "type" TEXT NOT NULL DEFAULT 'PERCENTAGE',
+          "value" DOUBLE PRECISION NOT NULL,
+          "startDate" TIMESTAMP(3) NOT NULL,
+          "endDate" TIMESTAMP(3) NOT NULL,
+          "packageId" TEXT,
+          "badgeText" TEXT NOT NULL DEFAULT 'DISKON SPESIAL',
+          "badgeStyle" TEXT NOT NULL DEFAULT 'RED_FIRE',
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "fk_discount_package" FOREIGN KEY ("packageId") REFERENCES public."TokenPackage"("id") ON DELETE SET NULL
+        );
+      `);
+      this.discountTableEnsured = true;
+    } catch (e) {
+      console.error('Failed to ensure Discount table', e);
+    }
+  }
+
+  async listDiscounts() {
+    await this.ensureDiscountTable();
+    const rows = await this.query(Prisma.sql`
+      SELECT d."id", d."name", d."type", d."value", d."startDate", d."endDate",
+             d."packageId", d."badgeText", d."badgeStyle", d."isActive",
+             d."createdAt", d."updatedAt",
+             p."name" AS "packageName", p."tokenAmount" AS "packageTokens", p."price" AS "packagePrice"
+      FROM public."Discount" d
+      LEFT JOIN public."TokenPackage" p ON p."id" = d."packageId"
+      ORDER BY d."createdAt" DESC
+    `);
+    return rows;
+  }
+
+  async createDiscount(input: DiscountInput) {
+    await this.ensureDiscountTable();
+    const id = randomUUID();
+    const startDate = new Date(input.startDate);
+    const endDate = new Date(input.endDate);
+    const rows = await this.query(Prisma.sql`
+      INSERT INTO public."Discount" (
+        "id", "name", "type", "value", "startDate", "endDate",
+        "packageId", "badgeText", "badgeStyle", "isActive", "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${id}, ${input.name}, ${input.type}, ${Number(input.value)}, ${startDate}, ${endDate},
+        ${input.packageId || null}, ${input.badgeText || 'DISKON SPESIAL'},
+        ${input.badgeStyle || 'RED_FIRE'}, ${input.isActive ?? true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+      RETURNING *
+    `);
+    this.invalidateOverview();
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async updateDiscount(id: string, input: Partial<DiscountInput>) {
+    await this.ensureDiscountTable();
+    const startDate = input.startDate ? new Date(input.startDate) : null;
+    const endDate = input.endDate ? new Date(input.endDate) : null;
+    const rows = await this.query(Prisma.sql`
+      UPDATE public."Discount" SET
+        "name" = COALESCE(${input.name ?? null}, "name"),
+        "type" = COALESCE(${input.type ?? null}, "type"),
+        "value" = COALESCE(${input.value !== undefined ? Number(input.value) : null}, "value"),
+        "startDate" = COALESCE(${startDate}, "startDate"),
+        "endDate" = COALESCE(${endDate}, "endDate"),
+        "packageId" = CASE WHEN ${input.packageId !== undefined} THEN ${input.packageId ?? null} ELSE "packageId" END,
+        "badgeText" = COALESCE(${input.badgeText ?? null}, "badgeText"),
+        "badgeStyle" = COALESCE(${input.badgeStyle ?? null}, "badgeStyle"),
+        "isActive" = COALESCE(${input.isActive ?? null}, "isActive"),
+        "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = ${id}
+      RETURNING *
+    `);
+    this.invalidateOverview();
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async deleteDiscount(id: string) {
+    await this.ensureDiscountTable();
+    const rows = await this.query<Array<{ id: string; name: string }>>(Prisma.sql`
+      DELETE FROM public."Discount" WHERE "id" = ${id} RETURNING "id", "name"
+    `);
+    this.invalidateOverview();
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
   async listUsers(search = '') {
     const pattern = `%${search.trim()}%`;
     return this.query(Prisma.sql`
@@ -1111,6 +1226,76 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }));
   }
 
+  async createTopic(input: any) {
+    const cleanTitle = (input.title || '').trim();
+    const rawSlug = input.slug || cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const id = `top-${input.subtest?.toLowerCase().replace(/_/g, '-') || 'gen'}-${rawSlug}-${Math.random().toString(36).substring(2, 6)}`;
+    const order = Number(input.order) || 1;
+    await this.query(Prisma.sql`
+      INSERT INTO public."Topic" ("id", "subtest", "title", "slug", "order", "createdAt")
+      VALUES (${id}, ${input.subtest}, ${cleanTitle}, ${rawSlug}, ${order}, CURRENT_TIMESTAMP)
+    `);
+    return { id, subtest: input.subtest, title: cleanTitle, slug: rawSlug, order, subtopics: [] };
+  }
+
+  async updateTopic(id: string, input: any) {
+    const updates: Prisma.Sql[] = [];
+    if (input.subtest) updates.push(Prisma.sql`"subtest" = ${input.subtest}`);
+    if (input.title) updates.push(Prisma.sql`"title" = ${input.title.trim()}`);
+    if (input.slug) updates.push(Prisma.sql`"slug" = ${input.slug.trim()}`);
+    if (input.order !== undefined) updates.push(Prisma.sql`"order" = ${Number(input.order)}`);
+
+    if (updates.length > 0) {
+      await this.query(Prisma.sql`
+        UPDATE public."Topic"
+        SET ${Prisma.join(updates, ', ')}
+        WHERE "id" = ${id}
+      `);
+    }
+    return { id, ...input };
+  }
+
+  async deleteTopic(id: string) {
+    await this.query(Prisma.sql`DELETE FROM public."Subtopic" WHERE "topicId" = ${id}`);
+    await this.query(Prisma.sql`DELETE FROM public."Topic" WHERE "id" = ${id}`);
+    return true;
+  }
+
+  async createSubtopic(input: any) {
+    const cleanTitle = (input.title || '').trim();
+    const rawSlug = input.slug || cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const id = `sub-${rawSlug}-${Math.random().toString(36).substring(2, 6)}`;
+    const order = Number(input.order) || 1;
+    await this.query(Prisma.sql`
+      INSERT INTO public."Subtopic" ("id", "topicId", "title", "slug", "order", "createdAt")
+      VALUES (${id}, ${input.topicId}, ${cleanTitle}, ${rawSlug}, ${order}, CURRENT_TIMESTAMP)
+    `);
+    return { id, topicId: input.topicId, title: cleanTitle, slug: rawSlug, order };
+  }
+
+  async updateSubtopic(id: string, input: any) {
+    const updates: Prisma.Sql[] = [];
+    if (input.topicId) updates.push(Prisma.sql`"topicId" = ${input.topicId}`);
+    if (input.title) updates.push(Prisma.sql`"title" = ${input.title.trim()}`);
+    if (input.slug) updates.push(Prisma.sql`"slug" = ${input.slug.trim()}`);
+    if (input.order !== undefined) updates.push(Prisma.sql`"order" = ${Number(input.order)}`);
+
+    if (updates.length > 0) {
+      await this.query(Prisma.sql`
+        UPDATE public."Subtopic"
+        SET ${Prisma.join(updates, ', ')}
+        WHERE "id" = ${id}
+      `);
+    }
+    return { id, ...input };
+  }
+
+  async deleteSubtopic(id: string) {
+    await this.query(Prisma.sql`UPDATE public."Question" SET "subtopic_id" = NULL WHERE "subtopic_id" = ${id}`);
+    await this.query(Prisma.sql`DELETE FROM public."Subtopic" WHERE "id" = ${id}`);
+    return true;
+  }
+
   async listQuestions(search = '', subtest = '', target = '') {
     const filterClauses: Prisma.Sql[] = [];
     if (search && search.trim()) {
@@ -1273,6 +1458,10 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       throw new ServiceUnavailableException('Jitu management database is not configured. Set JITU_CONTROL_CENTER_DATABASE_URL.');
     }
     return this.prisma;
+  }
+
+  private async execute(statement: Prisma.Sql): Promise<void> {
+    await this.query(statement);
   }
 
   private async query<T = unknown>(statement: Prisma.Sql, attempts = 3): Promise<T> {

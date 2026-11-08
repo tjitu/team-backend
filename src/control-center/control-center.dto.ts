@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateTryoutControlDto {
   @IsString() @MinLength(2) title!: string;
@@ -125,4 +125,56 @@ export class UpdateQuestionControlDto {
   @IsOptional() solutionSteps?: CreateSolutionStepDto[];
   @IsString() @IsOptional() quickTrick?: string | null;
   @IsString() @IsOptional() staticExplanation?: string | null;
+}
+
+export class CreateDiscountControlDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsIn(['PERCENTAGE', 'FIXED']) type!: 'PERCENTAGE' | 'FIXED';
+  @Min(0) value!: number;
+  @IsDateString() startDate!: string;
+  @IsDateString() endDate!: string;
+  @IsString() @IsOptional() packageId?: string | null;
+  @IsString() @IsOptional() badgeText?: string;
+  @IsString() @IsOptional() badgeStyle?: string;
+  @IsBoolean() @IsOptional() isActive?: boolean;
+}
+
+export class UpdateDiscountControlDto {
+  @IsString() @MinLength(2) @IsOptional() name?: string;
+  @IsIn(['PERCENTAGE', 'FIXED']) @IsOptional() type?: 'PERCENTAGE' | 'FIXED';
+  @Min(0) @IsOptional() value?: number;
+  @IsDateString() @IsOptional() startDate?: string;
+  @IsDateString() @IsOptional() endDate?: string;
+  @IsString() @IsOptional() packageId?: string | null;
+  @IsString() @IsOptional() badgeText?: string;
+  @IsString() @IsOptional() badgeStyle?: string;
+  @IsBoolean() @IsOptional() isActive?: boolean;
+}
+
+export class CreateTopicControlDto {
+  @IsString() @MinLength(2) subtest!: string;
+  @IsString() @MinLength(2) title!: string;
+  @IsString() @IsOptional() slug?: string;
+  @IsInt() @Min(0) @IsOptional() order?: number;
+}
+
+export class UpdateTopicControlDto {
+  @IsString() @MinLength(2) @IsOptional() subtest?: string;
+  @IsString() @MinLength(2) @IsOptional() title?: string;
+  @IsString() @IsOptional() slug?: string;
+  @IsInt() @Min(0) @IsOptional() order?: number;
+}
+
+export class CreateSubtopicControlDto {
+  @IsString() @MinLength(2) topicId!: string;
+  @IsString() @MinLength(2) title!: string;
+  @IsString() @IsOptional() slug?: string;
+  @IsInt() @Min(0) @IsOptional() order?: number;
+}
+
+export class UpdateSubtopicControlDto {
+  @IsString() @MinLength(2) @IsOptional() topicId?: string;
+  @IsString() @MinLength(2) @IsOptional() title?: string;
+  @IsString() @IsOptional() slug?: string;
+  @IsInt() @Min(0) @IsOptional() order?: number;
 }

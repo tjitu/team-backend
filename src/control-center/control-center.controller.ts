@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { CreateArticleControlDto, CreatePackageControlDto, CreateTryoutControlDto, UpdateArticleControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateTryoutControlDto, CreateQuestionControlDto, UpdateQuestionControlDto } from './control-center.dto';
+import { CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateTryoutControlDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -86,6 +86,30 @@ export class ControlCenterController {
     return this.controlCenter.deletePackage(request.user.id, id);
   }
 
+  @Get('discounts')
+  getDiscounts(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.listDiscounts(request.user.id);
+  }
+
+  @Post('discounts')
+  createDiscount(@Req() request: AuthenticatedRequest, @Body() body: CreateDiscountControlDto) {
+    return this.controlCenter.createDiscount(request.user.id, body);
+  }
+
+  @Patch('discounts/:id')
+  updateDiscount(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateDiscountControlDto,
+  ) {
+    return this.controlCenter.updateDiscount(request.user.id, id, body);
+  }
+
+  @Delete('discounts/:id')
+  deleteDiscount(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteDiscount(request.user.id, id);
+  }
+
   @Get('users')
   getUsers(@Req() request: AuthenticatedRequest, @Query('search') search?: string) {
     return this.controlCenter.listUsers(request.user.id, search);
@@ -146,6 +170,44 @@ export class ControlCenterController {
   @Get('topics')
   getTopics(@Req() request: AuthenticatedRequest) {
     return this.controlCenter.listTopics(request.user.id);
+  }
+
+  @Post('topics')
+  createTopic(@Req() request: AuthenticatedRequest, @Body() body: CreateTopicControlDto) {
+    return this.controlCenter.createTopic(request.user.id, body);
+  }
+
+  @Patch('topics/:id')
+  updateTopic(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateTopicControlDto,
+  ) {
+    return this.controlCenter.updateTopic(request.user.id, id, body);
+  }
+
+  @Delete('topics/:id')
+  deleteTopic(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteTopic(request.user.id, id);
+  }
+
+  @Post('subtopics')
+  createSubtopic(@Req() request: AuthenticatedRequest, @Body() body: CreateSubtopicControlDto) {
+    return this.controlCenter.createSubtopic(request.user.id, body);
+  }
+
+  @Patch('subtopics/:id')
+  updateSubtopic(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateSubtopicControlDto,
+  ) {
+    return this.controlCenter.updateSubtopic(request.user.id, id, body);
+  }
+
+  @Delete('subtopics/:id')
+  deleteSubtopic(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteSubtopic(request.user.id, id);
   }
 
   @Get('questions')

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { TeamRole } from '@prisma/client';
 import { TeamAccessService } from '../team-access/team-access.service';
 import { REVENUE_DATA_SOURCE, RevenueDataSource } from './revenue-data-source';
-import { ArticleInput, HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput } from './jitu-management.data-source';
+import { ArticleInput, DiscountInput, HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput } from './jitu-management.data-source';
 import { VercelAnalyticsService } from './vercel-analytics.service';
 
 @Injectable()
@@ -146,6 +146,42 @@ export class ControlCenterService {
     return result;
   }
 
+  async listDiscounts(userId: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listDiscounts();
+  }
+
+  async createDiscount(userId: string, input: DiscountInput) {
+    await this.requireAdministrator(userId);
+    const start = new Date(input.startDate).getTime();
+    const end = new Date(input.endDate).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+      throw new BadRequestException('Discount end date must be after its start date.');
+    }
+    return this.jituManagement.createDiscount(input);
+  }
+
+  async updateDiscount(userId: string, id: string, input: Partial<DiscountInput>) {
+    await this.requireAdministrator(userId);
+    if (input.startDate && input.endDate) {
+      const start = new Date(input.startDate).getTime();
+      const end = new Date(input.endDate).getTime();
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+        throw new BadRequestException('Discount end date must be after its start date.');
+      }
+    }
+    const result = await this.jituManagement.updateDiscount(id, input);
+    if (!result) throw new NotFoundException('Discount not found.');
+    return result;
+  }
+
+  async deleteDiscount(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.deleteDiscount(id);
+    if (!result) throw new NotFoundException('Discount not found.');
+    return result;
+  }
+
   async listArticles(userId: string, search = '', status = '') {
     await this.requireAdministrator(userId);
     return this.jituManagement.listArticles(search, status);
@@ -178,6 +214,36 @@ export class ControlCenterService {
   async listTopics(userId: string) {
     await this.requireAdministrator(userId);
     return this.jituManagement.listTopics();
+  }
+
+  async createTopic(userId: string, input: any) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.createTopic(input);
+  }
+
+  async updateTopic(userId: string, id: string, input: any) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.updateTopic(id, input);
+  }
+
+  async deleteTopic(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.deleteTopic(id);
+  }
+
+  async createSubtopic(userId: string, input: any) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.createSubtopic(input);
+  }
+
+  async updateSubtopic(userId: string, id: string, input: any) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.updateSubtopic(id, input);
+  }
+
+  async deleteSubtopic(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.deleteSubtopic(id);
   }
 
   async listQuestions(userId: string, search = '', subtest = '', target = '') {
