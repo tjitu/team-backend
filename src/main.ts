@@ -7,6 +7,14 @@ import { configureTeamApp } from './create-app';
 
 setDefaultResultOrder('ipv4first');
 
+process.on('unhandledRejection', (reason) => {
+  console.error('[team-backend] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[team-backend] Uncaught Exception:', err);
+});
+
 async function bootstrap(): Promise<void> {
   const app = configureTeamApp(await NestFactory.create(AppModule));
   const port = Number(process.env.PORT ?? 3200);
