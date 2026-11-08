@@ -175,7 +175,6 @@ export class UpdateVoucherControlDto {
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
-
 export class CreateTopicControlDto {
   @IsString() @MinLength(2) subtest!: string;
   @IsString() @MinLength(2) title!: string;

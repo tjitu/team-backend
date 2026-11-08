@@ -9,13 +9,20 @@ interface SupabaseAdminUser {
   message?: unknown;
 }
 
+const ADMIN_REQUEST_TIMEOUT_MS = 12_000;
+const ADMIN_RETRY_DELAYS_MS = [350, 800];
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 @Injectable()
 export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
   async createUser(input: { email: string; password: string; name: string }): Promise<{ id: string; email: string }> {
     const { supabaseUrl, secretKey } = this.configuration();
     let response: Response;
     try {
-      response = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+      response = await this.fetchWithRetry(`${supabaseUrl}/auth/v1/admin/users`, {
         method: 'POST',
         headers: this.headers(secretKey),
         body: JSON.stringify({
@@ -24,7 +31,6 @@ export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
           email_confirm: true,
           user_metadata: { full_name: input.name, name: input.name },
         }),
-        signal: AbortSignal.timeout(10_000),
         cache: 'no-store',
       });
     } catch {
@@ -52,16 +58,38 @@ export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
     const { supabaseUrl, secretKey } = this.configuration();
     let response: Response;
     try {
-      response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      response = await this.fetchWithRetry(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
         method: 'DELETE',
         headers: this.headers(secretKey),
-        signal: AbortSignal.timeout(10_000),
         cache: 'no-store',
       });
     } catch {
       throw new ServiceUnavailableException('Could not connect to Supabase Auth to roll back the account.');
     }
     if (!response.ok) throw new ServiceUnavailableException('Could not roll back the Supabase Auth account.');
+  }
+
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= ADMIN_RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...init,
+          signal: AbortSignal.timeout(ADMIN_REQUEST_TIMEOUT_MS),
+        });
+        if (response.status >= 500 && attempt < ADMIN_RETRY_DELAYS_MS.length) {
+          await sleep(ADMIN_RETRY_DELAYS_MS[attempt]);
+          continue;
+        }
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt < ADMIN_RETRY_DELAYS_MS.length) {
+          await sleep(ADMIN_RETRY_DELAYS_MS[attempt]);
+        }
+      }
+    }
+    throw lastError;
   }
 
   private configuration() {
