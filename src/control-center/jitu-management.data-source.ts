@@ -22,7 +22,7 @@ export type PackageInput = {
   isActive?: boolean;
 };
 
-export type ManagedUserInput = { role?: 'USER' | 'ADMIN'; target?: string | null };
+export type ManagedUserInput = { role?: 'USER' | 'ADMIN'; target?: string | null; isBanned?: boolean };
 export type HiringApplicationInput = { status?: 'SUBMITTED' | 'UNDER_REVIEW' | 'INTERVIEW' | 'ACCEPTED' | 'REJECTED'; adminNotes?: string };
 
 export type ArticleInput = {
@@ -96,6 +96,9 @@ export interface JituManagementDataSource {
   deletePackage(id: string): Promise<unknown | null>;
   listUsers(search?: string): Promise<unknown>;
   updateUser(id: string, input: ManagedUserInput): Promise<unknown | null>;
+  deleteUser(id: string): Promise<unknown | null>;
+  listPayments(status?: string, search?: string): Promise<unknown>;
+  getPaymentsSummary(): Promise<unknown>;
   listHiringApplications(search?: string): Promise<unknown>;
   updateHiringApplication(id: string, input: HiringApplicationInput): Promise<unknown | null>;
   listArticles(search?: string, status?: string): Promise<unknown>;
@@ -754,7 +757,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   async listUsers(search = '') {
     const pattern = `%${search.trim()}%`;
     return this.query(Prisma.sql`
-      SELECT "id", "name", "email", "role"::text AS "role", "target", "tokenBalance", "createdAt"
+      SELECT "id", "name", "email", "image", "role"::text AS "role", "target", "tokenBalance", "currentStreak", "createdAt",
+             COALESCE("isBanned", false) AS "isBanned",
+             COALESCE("emailVerified", false) AS "emailVerified"
       FROM public."user"
       WHERE ${search.trim() === ''} OR "name" ILIKE ${pattern} OR "email" ILIKE ${pattern}
       ORDER BY "createdAt" DESC
@@ -767,12 +772,153 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       UPDATE public."user" SET
         "role" = CASE WHEN ${input.role !== undefined} THEN CAST(${input.role ?? 'USER'} AS public."Role") ELSE "role" END,
         "target" = CASE WHEN ${input.target !== undefined} THEN ${input.target ?? null} ELSE "target" END,
+        "isBanned" = CASE WHEN ${input.isBanned !== undefined} THEN ${Boolean(input.isBanned)} ELSE "isBanned" END,
         "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${id}
-      RETURNING "id", "name", "email", "role"::text AS "role", "target", "tokenBalance", "createdAt"
+      RETURNING "id", "name", "email", "image", "role"::text AS "role", "target", "tokenBalance", "currentStreak", "createdAt", COALESCE("isBanned", false) AS "isBanned"
     `);
     this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async deleteUser(id: string) {
+    try { await this.query(Prisma.sql`DELETE FROM public."session" WHERE "userId" = ${id}`); } catch {}
+    try { await this.query(Prisma.sql`DELETE FROM public."account" WHERE "userId" = ${id}`); } catch {}
+    try { await this.query(Prisma.sql`DELETE FROM public."Payment" WHERE "userId" = ${id}`); } catch {}
+    try { await this.query(Prisma.sql`DELETE FROM public."TokenTransaction" WHERE "userId" = ${id}`); } catch {}
+    try { await this.query(Prisma.sql`DELETE FROM public."TryOutAttempt" WHERE "userId" = ${id}`); } catch {}
+    try { await this.query(Prisma.sql`DELETE FROM public."DailyQuestionLog" WHERE "userId" = ${id}`); } catch {}
+    try { await this.query(Prisma.sql`DELETE FROM public."UnlockedSolution" WHERE "userId" = ${id}`); } catch {}
+
+    const rows = await this.query<Array<{ id: string }>>(Prisma.sql`
+      DELETE FROM public."user" WHERE "id" = ${id} RETURNING "id"
+    `);
+    this.invalidateOverview();
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async listPayments(status?: string, search = '') {
+    const pattern = `%${search.trim()}%`;
+    const filterStatus = status && status !== 'ALL' ? status.toUpperCase() : null;
+
+    const rows = await this.query<Array<any>>(Prisma.sql`
+      SELECT
+        p."id",
+        p."orderId",
+        p."amount",
+        p."tokenAmount",
+        p."status"::text AS "status",
+        p."paymentMethod",
+        p."snapToken",
+        p."metadata",
+        p."createdAt",
+        p."updatedAt",
+        u."id" AS "userId",
+        u."name" AS "userName",
+        u."email" AS "userEmail",
+        u."image" AS "userImage",
+        u."target" AS "userTarget",
+        u."tokenBalance" AS "userTokenBalance",
+        u."currentStreak" AS "userCurrentStreak",
+        u."role"::text AS "userRole",
+        COALESCE(u."isBanned", false) AS "userIsBanned",
+        u."createdAt" AS "userCreatedAt",
+        tp."id" AS "packageId",
+        tp."name" AS "packageName",
+        tp."price" AS "packagePrice"
+      FROM public."Payment" p
+      LEFT JOIN public."user" u ON p."userId" = u."id"
+      LEFT JOIN public."TokenPackage" tp ON p."tokenPackageId" = tp."id"
+      WHERE (${filterStatus === null} OR p."status"::text = ${filterStatus})
+        AND (${search.trim() === ''} OR p."orderId" ILIKE ${pattern} OR u."name" ILIKE ${pattern} OR u."email" ILIKE ${pattern})
+      ORDER BY p."createdAt" DESC
+      LIMIT 200
+    `);
+
+    return (Array.isArray(rows) ? rows : []).map(r => ({
+      id: r.id,
+      orderId: r.orderId,
+      amount: Number(r.amount ?? 0),
+      tokenAmount: Number(r.tokenAmount ?? 0),
+      status: r.status,
+      paymentMethod: r.paymentMethod,
+      snapToken: r.snapToken,
+      metadata: r.metadata,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      user: r.userId ? {
+        id: r.userId,
+        name: r.userName,
+        email: r.userEmail,
+        image: r.userImage,
+        target: r.userTarget,
+        tokenBalance: Number(r.userTokenBalance ?? 0),
+        currentStreak: Number(r.userCurrentStreak ?? 0),
+        role: r.userRole,
+        isBanned: Boolean(r.userIsBanned),
+        createdAt: r.userCreatedAt,
+      } : null,
+      tokenPackage: r.packageId ? {
+        id: r.packageId,
+        name: r.packageName,
+        price: Number(r.packagePrice ?? 0),
+      } : null,
+    }));
+  }
+
+  async getPaymentsSummary() {
+    const [aggregates, monthlyRows] = await Promise.all([
+      this.query<Array<any>>(Prisma.sql`
+        SELECT
+          COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "totalRevenue",
+          COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::text AS "confirmedPayments",
+          COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::text AS "pendingPayments",
+          COUNT(*) FILTER (WHERE "status"::text = 'CANCELLED')::text AS "cancelledPayments",
+          COUNT(*) FILTER (WHERE "status"::text = 'DECLINED')::text AS "declinedPayments"
+        FROM public."Payment"
+      `),
+      this.query<Array<any>>(Prisma.sql`
+        SELECT
+          TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
+          COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "revenue",
+          COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::text AS "confirmedPayments",
+          COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::text AS "pendingPayments",
+          COUNT(*) FILTER (WHERE "status"::text = 'CANCELLED')::text AS "cancelledPayments"
+        FROM public."Payment"
+        WHERE "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '11 months'
+        GROUP BY date_trunc('month', "createdAt")
+        ORDER BY date_trunc('month', "createdAt") ASC
+      `),
+    ]);
+
+    const values = new Map((Array.isArray(monthlyRows) ? monthlyRows : []).map((row) => [row.month, row]));
+    const monthlyRevenue = [];
+    const month = new Date();
+    month.setUTCDate(1);
+    month.setUTCHours(0, 0, 0, 0);
+    for (let offset = 11; offset >= 0; offset -= 1) {
+      const date = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - offset, 1));
+      const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      const value = values.get(key);
+      monthlyRevenue.push({
+        month: key,
+        revenue: Number(value?.revenue ?? 0),
+        confirmedPayments: Number(value?.confirmedPayments ?? 0),
+        pendingPayments: Number(value?.pendingPayments ?? 0),
+        cancelledPayments: Number(value?.cancelledPayments ?? 0),
+      });
+    }
+
+    const aggregate = Array.isArray(aggregates) ? aggregates[0] : null;
+    return {
+      configured: true,
+      totalRevenue: Number(aggregate?.totalRevenue ?? 0),
+      confirmedPayments: Number(aggregate?.confirmedPayments ?? 0),
+      pendingPayments: Number(aggregate?.pendingPayments ?? 0),
+      cancelledPayments: Number(aggregate?.cancelledPayments ?? 0),
+      declinedPayments: Number(aggregate?.declinedPayments ?? 0),
+      monthlyRevenue,
+    };
   }
 
   async listHiringApplications(search = '') {

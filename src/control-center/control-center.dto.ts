@@ -27,6 +27,7 @@ export class UpdateTryoutControlDto {
 export class UpdateManagedUserDto {
   @IsIn(['USER', 'ADMIN']) @IsOptional() role?: 'USER' | 'ADMIN';
   @IsString() @MinLength(1) @MaxLength(100) @IsOptional() target?: string | null;
+  @IsBoolean() @IsOptional() isBanned?: boolean;
 }
 
 export class UpdateHiringApplicationDto {

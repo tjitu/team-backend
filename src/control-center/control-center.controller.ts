@@ -37,6 +37,15 @@ export class ControlCenterController {
     return this.controlCenter.getRevenue(request.user.id);
   }
 
+  @Get('payments')
+  getPayments(
+    @Req() request: AuthenticatedRequest,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.controlCenter.listPayments(request.user.id, status, search);
+  }
+
   @Get('tryouts')
   getTryouts(@Req() request: AuthenticatedRequest) {
     return this.controlCenter.listTryouts(request.user.id);
@@ -85,6 +94,11 @@ export class ControlCenterController {
   @Patch('users/:id')
   updateUser(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: UpdateManagedUserDto) {
     return this.controlCenter.updateUser(request.user.id, id, body);
+  }
+
+  @Delete('users/:id')
+  deleteUser(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteUser(request.user.id, id);
   }
 
   @Get('careers/applications')

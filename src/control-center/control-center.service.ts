@@ -98,6 +98,22 @@ export class ControlCenterService {
     return result;
   }
 
+  async deleteUser(userId: string, targetUserId: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.deleteUser(targetUserId);
+    if (!result) throw new NotFoundException('User not found.');
+    return result;
+  }
+
+  async listPayments(userId: string, status?: string, search?: string) {
+    await this.requireAdministrator(userId);
+    const [summary, payments] = await Promise.all([
+      this.jituManagement.getPaymentsSummary(),
+      this.jituManagement.listPayments(status, search),
+    ]);
+    return { summary, payments };
+  }
+
   async listHiringApplications(userId: string, search = '') {
     await this.requireAdministrator(userId);
     return this.jituManagement.listHiringApplications(search);
