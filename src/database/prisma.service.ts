@@ -5,6 +5,14 @@ import { PrismaClient } from '@prisma/client';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
+  constructor() {
+    let url = process.env.DATABASE_URL;
+    if (url && !url.includes('connection_limit=')) {
+      url = `${url}${url.includes('?') ? '&' : '?'}connection_limit=5&pool_timeout=30`;
+    }
+    super(url ? { datasources: { db: { url } } } : undefined);
+  }
+
   async onModuleInit(): Promise<void> {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {

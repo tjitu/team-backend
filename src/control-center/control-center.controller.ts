@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateTryoutControlDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutControlDto } from './control-center.dto';
+import { CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateTryoutControlDto, CreateVoucherControlDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutControlDto, UpdateVoucherControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -108,6 +108,30 @@ export class ControlCenterController {
   @Delete('discounts/:id')
   deleteDiscount(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
     return this.controlCenter.deleteDiscount(request.user.id, id);
+  }
+
+  @Get('vouchers')
+  getVouchers(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.listVouchers(request.user.id);
+  }
+
+  @Post('vouchers')
+  createVoucher(@Req() request: AuthenticatedRequest, @Body() body: CreateVoucherControlDto) {
+    return this.controlCenter.createVoucher(request.user.id, body);
+  }
+
+  @Patch('vouchers/:id')
+  updateVoucher(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateVoucherControlDto,
+  ) {
+    return this.controlCenter.updateVoucher(request.user.id, id, body);
+  }
+
+  @Delete('vouchers/:id')
+  deleteVoucher(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.deleteVoucher(request.user.id, id);
   }
 
   @Get('users')

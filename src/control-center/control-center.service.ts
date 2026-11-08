@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { TeamRole } from '@prisma/client';
 import { TeamAccessService } from '../team-access/team-access.service';
 import { REVENUE_DATA_SOURCE, RevenueDataSource } from './revenue-data-source';
-import { ArticleInput, DiscountInput, HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput } from './jitu-management.data-source';
+import { ArticleInput, DiscountInput, HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput, VoucherInput } from './jitu-management.data-source';
 import { VercelAnalyticsService } from './vercel-analytics.service';
 
 @Injectable()
@@ -179,6 +179,30 @@ export class ControlCenterService {
     await this.requireAdministrator(userId);
     const result = await this.jituManagement.deleteDiscount(id);
     if (!result) throw new NotFoundException('Discount not found.');
+    return result;
+  }
+
+  async listVouchers(userId: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listVouchers();
+  }
+
+  async createVoucher(userId: string, input: VoucherInput) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.createVoucher(input);
+  }
+
+  async updateVoucher(userId: string, id: string, input: Partial<VoucherInput>) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.updateVoucher(id, input);
+    if (!result) throw new NotFoundException('Voucher not found.');
+    return result;
+  }
+
+  async deleteVoucher(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.deleteVoucher(id);
+    if (!result) throw new NotFoundException('Voucher not found.');
     return result;
   }
 

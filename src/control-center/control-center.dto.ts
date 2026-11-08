@@ -151,6 +151,31 @@ export class UpdateDiscountControlDto {
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
+export class CreateVoucherControlDto {
+  @IsString() @MinLength(2) code!: string;
+  @IsInt() @Min(1) @Max(100) discountPercent!: number;
+  @IsInt() @Min(0) @IsOptional() maxDiscount?: number | null;
+  @IsInt() @Min(0) @IsOptional() minPurchase?: number;
+  @IsInt() @Min(1) @IsOptional() maxUsage?: number | null;
+  @IsDateString() @IsOptional() expiresAt?: string | null;
+  @IsString() @IsOptional() description?: string | null;
+  @IsString() @IsOptional() referrerName?: string | null;
+  @IsBoolean() @IsOptional() isActive?: boolean;
+}
+
+export class UpdateVoucherControlDto {
+  @IsString() @MinLength(2) @IsOptional() code?: string;
+  @IsInt() @Min(1) @Max(100) @IsOptional() discountPercent?: number;
+  @IsInt() @Min(0) @IsOptional() maxDiscount?: number | null;
+  @IsInt() @Min(0) @IsOptional() minPurchase?: number;
+  @IsInt() @Min(1) @IsOptional() maxUsage?: number | null;
+  @IsDateString() @IsOptional() expiresAt?: string | null;
+  @IsString() @IsOptional() description?: string | null;
+  @IsString() @IsOptional() referrerName?: string | null;
+  @IsBoolean() @IsOptional() isActive?: boolean;
+}
+
+
 export class CreateTopicControlDto {
   @IsString() @MinLength(2) subtest!: string;
   @IsString() @MinLength(2) title!: string;

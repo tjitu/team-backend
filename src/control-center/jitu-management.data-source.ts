@@ -36,6 +36,18 @@ export type DiscountInput = {
   isActive?: boolean;
 };
 
+export type VoucherInput = {
+  code: string;
+  discountPercent: number;
+  maxDiscount?: number | null;
+  minPurchase?: number;
+  maxUsage?: number | null;
+  expiresAt?: string | null;
+  description?: string | null;
+  referrerName?: string | null;
+  isActive?: boolean;
+};
+
 export type ArticleInput = {
   title?: string;
   slug?: string;
@@ -134,6 +146,10 @@ export interface JituManagementDataSource {
   createDiscount(input: DiscountInput): Promise<unknown>;
   updateDiscount(id: string, input: Partial<DiscountInput>): Promise<unknown | null>;
   deleteDiscount(id: string): Promise<unknown | null>;
+  listVouchers(): Promise<unknown>;
+  createVoucher(input: VoucherInput): Promise<unknown>;
+  updateVoucher(id: string, input: Partial<VoucherInput>): Promise<unknown | null>;
+  deleteVoucher(id: string): Promise<unknown | null>;
 }
 
 @Injectable()
@@ -864,6 +880,142 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     await this.ensureDiscountTable();
     const rows = await this.query<Array<{ id: string; name: string }>>(Prisma.sql`
       DELETE FROM public."Discount" WHERE "id" = ${id} RETURNING "id", "name"
+    `);
+    this.invalidateOverview();
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  private voucherTableEnsured = false;
+  private async ensureVoucherTable() {
+    if (this.voucherTableEnsured) return;
+    try {
+      await this.query(Prisma.sql`
+        CREATE TABLE IF NOT EXISTS public."Voucher" (
+          "id" TEXT PRIMARY KEY,
+          "code" TEXT NOT NULL UNIQUE,
+          "discountPercent" INTEGER NOT NULL,
+          "maxDiscount" INTEGER,
+          "minPurchase" INTEGER NOT NULL DEFAULT 0,
+          "maxUsage" INTEGER,
+          "usedCount" INTEGER NOT NULL DEFAULT 0,
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "expiresAt" TIMESTAMP(3),
+          "description" TEXT,
+          "referrerName" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      this.voucherTableEnsured = true;
+    } catch (e) {
+      console.error('Failed to ensure Voucher table', e);
+    }
+  }
+
+  async listVouchers() {
+    await this.ensureVoucherTable();
+    const rows = await this.query(Prisma.sql`
+      SELECT
+        "id",
+        "code",
+        "discountPercent",
+        "maxDiscount",
+        "minPurchase",
+        "maxUsage",
+        "usedCount",
+        "isActive",
+        "expiresAt",
+        "description",
+        "referrerName",
+        "createdAt",
+        "updatedAt"
+      FROM public."Voucher"
+      ORDER BY "createdAt" DESC
+    `);
+    return rows;
+  }
+
+  async createVoucher(input: VoucherInput) {
+    await this.ensureVoucherTable();
+    const code = input.code.trim().toUpperCase();
+    const existing = await this.query<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM public."Voucher" WHERE "code" = ${code} LIMIT 1
+    `);
+    if (existing[0]) {
+      throw new BadRequestException(`Kode voucher "${code}" sudah digunakan.`);
+    }
+
+    const id = randomUUID();
+    const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+    const rows = await this.query(Prisma.sql`
+      INSERT INTO public."Voucher" (
+        "id", "code", "discountPercent", "maxDiscount", "minPurchase",
+        "maxUsage", "usedCount", "isActive", "expiresAt",
+        "description", "referrerName", "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${id},
+        ${code},
+        ${Number(input.discountPercent)},
+        ${input.maxDiscount ?? null},
+        ${Number(input.minPurchase ?? 0)},
+        ${input.maxUsage ?? null},
+        0,
+        ${input.isActive ?? true},
+        ${expiresAt},
+        ${input.description ?? null},
+        ${input.referrerName ?? null},
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      RETURNING *
+    `);
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async updateVoucher(id: string, input: Partial<VoucherInput>) {
+    await this.ensureVoucherTable();
+    const cleanCode = input.code ? input.code.trim().toUpperCase() : null;
+    if (cleanCode) {
+      const conflict = await this.query<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM public."Voucher" WHERE "code" = ${cleanCode} AND "id" <> ${id} LIMIT 1
+      `);
+      if (conflict[0]) {
+        throw new BadRequestException(`Kode voucher "${cleanCode}" sudah digunakan.`);
+      }
+    }
+
+    const expiresAt = input.expiresAt !== undefined
+      ? (input.expiresAt ? new Date(input.expiresAt) : null)
+      : null;
+
+    const rows = await this.query(Prisma.sql`
+      UPDATE public."Voucher" SET
+        "code" = COALESCE(${cleanCode}, "code"),
+        "discountPercent" = COALESCE(${input.discountPercent !== undefined ? Number(input.discountPercent) : null}, "discountPercent"),
+        "maxDiscount" = CASE WHEN ${input.maxDiscount !== undefined} THEN ${input.maxDiscount ?? null} ELSE "maxDiscount" END,
+        "minPurchase" = COALESCE(${input.minPurchase !== undefined ? Number(input.minPurchase) : null}, "minPurchase"),
+        "maxUsage" = CASE WHEN ${input.maxUsage !== undefined} THEN ${input.maxUsage ?? null} ELSE "maxUsage" END,
+        "isActive" = COALESCE(${input.isActive ?? null}, "isActive"),
+        "expiresAt" = CASE WHEN ${input.expiresAt !== undefined} THEN ${expiresAt} ELSE "expiresAt" END,
+        "description" = CASE WHEN ${input.description !== undefined} THEN ${input.description ?? null} ELSE "description" END,
+        "referrerName" = CASE WHEN ${input.referrerName !== undefined} THEN ${input.referrerName ?? null} ELSE "referrerName" END,
+        "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = ${id}
+      RETURNING *
+    `);
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  }
+
+  async deleteVoucher(id: string) {
+    await this.ensureVoucherTable();
+    try {
+      await this.query(Prisma.sql`
+        UPDATE public."Payment" SET "voucherId" = NULL WHERE "voucherId" = ${id}
+      `);
+    } catch {}
+    const rows = await this.query<Array<{ id: string; code: string }>>(Prisma.sql`
+      DELETE FROM public."Voucher" WHERE "id" = ${id} RETURNING "id", "code"
     `);
     this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
