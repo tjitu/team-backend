@@ -694,7 +694,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   async listPackages() {
     const rows = await this.query(Prisma.sql`
       SELECT p."id", p."name", p."tokenAmount", p."price", p."isActive", p."createdAt", p."updatedAt",
-             COUNT(pay."id")::int AS "paymentCount"
+             COUNT(CASE WHEN pay."status" = 'CONFIRMED' THEN 1 END)::int AS "paymentCount"
       FROM public."TokenPackage" p
       LEFT JOIN public."Payment" pay ON pay."tokenPackageId" = p."id"
       GROUP BY p."id"
