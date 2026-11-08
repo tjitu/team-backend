@@ -20,60 +20,70 @@ export class JituPaymentRevenueSource implements RevenueDataSource, OnModuleDest
 
   constructor() {
     const rawUrl = process.env.JITU_PURCHASES_DATABASE_URL || process.env.JITU_CONTROL_CENTER_DATABASE_URL;
-    const url = rawUrl
-      ? `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}connection_limit=1&pool_timeout=20`
-      : undefined;
+    let url = rawUrl;
+    if (url) {
+      if (url.includes('connection_limit=')) {
+        url = url.replace(/connection_limit=\d+/, 'connection_limit=2');
+      } else {
+        url = `${url}${url.includes('?') ? '&' : '?'}connection_limit=2&connect_timeout=30&pool_timeout=30`;
+      }
+    }
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
 
   async getSummary(): Promise<RevenueSummary> {
     if (!this.prisma) return this.emptySummary(false);
 
-    const [aggregates, monthlyRows] = await Promise.all([
-      this.prisma.$queryRaw<RevenueAggregateRow[]>(Prisma.sql`
-        SELECT
-          COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "totalRevenue",
-          COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::text AS "confirmedPayments",
-          COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::text AS "pendingPayments"
-        FROM public."Payment"
-      `),
-      this.prisma.$queryRaw<MonthlyRevenueRow[]>(Prisma.sql`
-        SELECT
-          TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
-          SUM("amount")::text AS "revenue",
-          COUNT(*)::text AS "confirmedPayments"
-        FROM public."Payment"
-        WHERE "status"::text = 'CONFIRMED'
-          AND "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '11 months'
-        GROUP BY date_trunc('month', "createdAt")
-        ORDER BY date_trunc('month', "createdAt") ASC
-      `),
-    ]);
+    try {
+      const [aggregates, monthlyRows] = await Promise.all([
+        this.prisma.$queryRaw<RevenueAggregateRow[]>(Prisma.sql`
+          SELECT
+            COALESCE(SUM("amount") FILTER (WHERE "status"::text = 'CONFIRMED'), 0)::text AS "totalRevenue",
+            COUNT(*) FILTER (WHERE "status"::text = 'CONFIRMED')::text AS "confirmedPayments",
+            COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::text AS "pendingPayments"
+          FROM public."Payment"
+        `),
+        this.prisma.$queryRaw<MonthlyRevenueRow[]>(Prisma.sql`
+          SELECT
+            TO_CHAR(date_trunc('month', "createdAt"), 'YYYY-MM') AS "month",
+            SUM("amount")::text AS "revenue",
+            COUNT(*)::text AS "confirmedPayments"
+          FROM public."Payment"
+          WHERE "status"::text = 'CONFIRMED'
+            AND "createdAt" >= date_trunc('month', CURRENT_TIMESTAMP) - INTERVAL '11 months'
+          GROUP BY date_trunc('month', "createdAt")
+          ORDER BY date_trunc('month', "createdAt") ASC
+        `),
+      ]);
 
-    const values = new Map(monthlyRows.map((row) => [row.month, row]));
-    const monthlyRevenue: MonthlyRevenue[] = [];
-    const month = new Date();
-    month.setUTCDate(1);
-    month.setUTCHours(0, 0, 0, 0);
-    for (let offset = 11; offset >= 0; offset -= 1) {
-      const date = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - offset, 1));
-      const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-      const value = values.get(key);
-      monthlyRevenue.push({
-        month: key,
-        revenue: Number(value?.revenue ?? 0),
-        confirmedPayments: Number(value?.confirmedPayments ?? 0),
-      });
+      const values = new Map(monthlyRows.map((row) => [row.month, row]));
+      const monthlyRevenue: MonthlyRevenue[] = [];
+      const month = new Date();
+      month.setUTCDate(1);
+      month.setUTCHours(0, 0, 0, 0);
+      for (let offset = 11; offset >= 0; offset -= 1) {
+        const date = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - offset, 1));
+        const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+        const value = values.get(key);
+        monthlyRevenue.push({
+          month: key,
+          revenue: Number(value?.revenue ?? 0),
+          confirmedPayments: Number(value?.confirmedPayments ?? 0),
+        });
+      }
+
+      const aggregate = aggregates[0];
+      return {
+        configured: true,
+        totalRevenue: Number(aggregate?.totalRevenue ?? 0),
+        confirmedPayments: Number(aggregate?.confirmedPayments ?? 0),
+        pendingPayments: Number(aggregate?.pendingPayments ?? 0),
+        monthlyRevenue,
+      };
+    } catch (error) {
+      console.warn('Failed to load revenue summary from database:', error instanceof Error ? error.message : error);
+      return this.emptySummary(true);
     }
-
-    const aggregate = aggregates[0];
-    return {
-      configured: true,
-      totalRevenue: Number(aggregate?.totalRevenue ?? 0),
-      confirmedPayments: Number(aggregate?.confirmedPayments ?? 0),
-      pendingPayments: Number(aggregate?.pendingPayments ?? 0),
-      monthlyRevenue,
-    };
   }
 
   async onModuleDestroy(): Promise<void> {

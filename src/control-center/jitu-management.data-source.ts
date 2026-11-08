@@ -125,6 +125,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   constructor(@Optional() private readonly vercelAnalytics?: VercelAnalyticsService) {
     const rawUrl = process.env.JITU_CONTROL_CENTER_DATABASE_URL || process.env.JITU_PURCHASES_DATABASE_URL;
     let url = rawUrl;
+    if (url && !url.includes('connection_limit=')) {
+      url = `${url}${url.includes('?') ? '&' : '?'}connection_limit=3&connect_timeout=30&pool_timeout=30`;
+    }
 
     this.prisma = url ? new PrismaClient({ datasources: { db: { url } } }) : null;
   }
@@ -711,7 +714,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   async updatePackage(id: string, input: PackageInput) {
-    const rows = await this.database().$queryRaw(Prisma.sql`
+    const rows = await this.query(Prisma.sql`
       UPDATE public."TokenPackage" SET
         "name" = COALESCE(${input.name ?? null}, "name"),
         "tokenAmount" = COALESCE(${input.tokenAmount ?? null}, "tokenAmount"),
@@ -1126,19 +1129,30 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return this.prisma;
   }
 
-  private async query<T = unknown>(statement: Prisma.Sql): Promise<T> {
-    try {
-      return await this.database().$queryRaw<T>(statement);
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientInitializationError ||
-        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P1001')
-      ) {
-        throw new ServiceUnavailableException(
-          'Jitu management database is unreachable. Check the host and credentials in JITU_CONTROL_CENTER_DATABASE_URL.',
-        );
+  private async query<T = unknown>(statement: Prisma.Sql, attempts = 3): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return await this.database().$queryRaw<T>(statement);
+      } catch (error) {
+        lastError = error;
+        const isTransient =
+          error instanceof Prisma.PrismaClientInitializationError ||
+          (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P1001');
+
+        if (isTransient && attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+
+        if (isTransient) {
+          throw new ServiceUnavailableException(
+            'Jitu management database is unreachable. Check the host and credentials in JITU_CONTROL_CENTER_DATABASE_URL.',
+          );
+        }
+        throw error;
       }
-      throw error;
     }
+    throw lastError;
   }
 }
