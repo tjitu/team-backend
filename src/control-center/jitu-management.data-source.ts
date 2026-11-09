@@ -33,18 +33,28 @@ export type DiscountInput = {
   packageId?: string | null;
   badgeText?: string;
   badgeStyle?: string;
+  issuedByUserId?: string | null;
+  issuedByName?: string | null;
+  issuedByEmail?: string | null;
   isActive?: boolean;
 };
 
 export type VoucherInput = {
   code: string;
   discountPercent: number;
+  commissionPercent?: number;
   maxDiscount?: number | null;
   minPurchase?: number;
   maxUsage?: number | null;
   expiresAt?: string | null;
   description?: string | null;
   referrerName?: string | null;
+  issuedToUserId?: string | null;
+  issuedToName?: string | null;
+  issuedToEmail?: string | null;
+  issuedByUserId?: string | null;
+  issuedByName?: string | null;
+  issuedByEmail?: string | null;
   isActive?: boolean;
 };
 
@@ -806,12 +816,24 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           "packageId" TEXT,
           "badgeText" TEXT NOT NULL DEFAULT 'DISKON SPESIAL',
           "badgeStyle" TEXT NOT NULL DEFAULT 'RED_FIRE',
+          "issuedByUserId" TEXT,
+          "issuedByName" TEXT,
+          "issuedByEmail" TEXT,
           "isActive" BOOLEAN NOT NULL DEFAULT true,
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           CONSTRAINT "fk_discount_package" FOREIGN KEY ("packageId") REFERENCES public."TokenPackage"("id") ON DELETE SET NULL
         );
       `);
+      await this.query(Prisma.sql`
+        ALTER TABLE public."Discount" ADD COLUMN IF NOT EXISTS "issuedByUserId" TEXT;
+      `).catch(() => {});
+      await this.query(Prisma.sql`
+        ALTER TABLE public."Discount" ADD COLUMN IF NOT EXISTS "issuedByName" TEXT;
+      `).catch(() => {});
+      await this.query(Prisma.sql`
+        ALTER TABLE public."Discount" ADD COLUMN IF NOT EXISTS "issuedByEmail" TEXT;
+      `).catch(() => {});
       this.discountTableEnsured = true;
     } catch (e) {
       console.error('Failed to ensure Discount table', e);
@@ -822,8 +844,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     await this.ensureDiscountTable();
     const rows = await this.query(Prisma.sql`
       SELECT d."id", d."name", d."type", d."value", d."startDate", d."endDate",
-             d."packageId", d."badgeText", d."badgeStyle", d."isActive",
-             d."createdAt", d."updatedAt",
+             d."packageId", d."badgeText", d."badgeStyle",
+             d."issuedByUserId", d."issuedByName", d."issuedByEmail",
+             d."isActive", d."createdAt", d."updatedAt",
              p."name" AS "packageName", p."tokenAmount" AS "packageTokens", p."price" AS "packagePrice"
       FROM public."Discount" d
       LEFT JOIN public."TokenPackage" p ON p."id" = d."packageId"
@@ -840,12 +863,16 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const rows = await this.query(Prisma.sql`
       INSERT INTO public."Discount" (
         "id", "name", "type", "value", "startDate", "endDate",
-        "packageId", "badgeText", "badgeStyle", "isActive", "createdAt", "updatedAt"
+        "packageId", "badgeText", "badgeStyle",
+        "issuedByUserId", "issuedByName", "issuedByEmail",
+        "isActive", "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${input.name}, ${input.type}, ${Number(input.value)}, ${startDate}, ${endDate},
         ${input.packageId || null}, ${input.badgeText || 'DISKON SPESIAL'},
-        ${input.badgeStyle || 'RED_FIRE'}, ${input.isActive ?? true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ${input.badgeStyle || 'RED_FIRE'},
+        ${input.issuedByUserId || null}, ${input.issuedByName || null}, ${input.issuedByEmail || null},
+        ${input.isActive ?? true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
       RETURNING *
     `);
@@ -867,6 +894,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "packageId" = CASE WHEN ${input.packageId !== undefined} THEN ${input.packageId ?? null} ELSE "packageId" END,
         "badgeText" = COALESCE(${input.badgeText ?? null}, "badgeText"),
         "badgeStyle" = COALESCE(${input.badgeStyle ?? null}, "badgeStyle"),
+        "issuedByUserId" = CASE WHEN ${input.issuedByUserId !== undefined} THEN ${input.issuedByUserId ?? null} ELSE "issuedByUserId" END,
+        "issuedByName" = CASE WHEN ${input.issuedByName !== undefined} THEN ${input.issuedByName ?? null} ELSE "issuedByName" END,
+        "issuedByEmail" = CASE WHEN ${input.issuedByEmail !== undefined} THEN ${input.issuedByEmail ?? null} ELSE "issuedByEmail" END,
         "isActive" = COALESCE(${input.isActive ?? null}, "isActive"),
         "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${id}
@@ -894,6 +924,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           "id" TEXT PRIMARY KEY,
           "code" TEXT NOT NULL UNIQUE,
           "discountPercent" INTEGER NOT NULL,
+          "commissionPercent" INTEGER NOT NULL DEFAULT 0,
           "maxDiscount" INTEGER,
           "minPurchase" INTEGER NOT NULL DEFAULT 0,
           "maxUsage" INTEGER,
@@ -902,9 +933,25 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           "expiresAt" TIMESTAMP(3),
           "description" TEXT,
           "referrerName" TEXT,
+          "issuedToUserId" TEXT,
+          "issuedToName" TEXT,
+          "issuedToEmail" TEXT,
+          "issuedByUserId" TEXT,
+          "issuedByName" TEXT,
+          "issuedByEmail" TEXT,
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+      await this.query(Prisma.sql`
+        ALTER TABLE public."Voucher"
+          ADD COLUMN IF NOT EXISTS "commissionPercent" INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS "issuedToUserId" TEXT,
+          ADD COLUMN IF NOT EXISTS "issuedToName" TEXT,
+          ADD COLUMN IF NOT EXISTS "issuedToEmail" TEXT,
+          ADD COLUMN IF NOT EXISTS "issuedByUserId" TEXT,
+          ADD COLUMN IF NOT EXISTS "issuedByName" TEXT,
+          ADD COLUMN IF NOT EXISTS "issuedByEmail" TEXT;
       `);
       this.voucherTableEnsured = true;
     } catch (e) {
@@ -914,25 +961,54 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
   async listVouchers() {
     await this.ensureVoucherTable();
-    const rows = await this.query(Prisma.sql`
+    const rows = await this.query<Array<any>>(Prisma.sql`
       SELECT
-        "id",
-        "code",
-        "discountPercent",
-        "maxDiscount",
-        "minPurchase",
-        "maxUsage",
-        "usedCount",
-        "isActive",
-        "expiresAt",
-        "description",
-        "referrerName",
-        "createdAt",
-        "updatedAt"
-      FROM public."Voucher"
-      ORDER BY "createdAt" DESC
+        v."id",
+        v."code",
+        v."discountPercent",
+        COALESCE(v."commissionPercent", 0)::int AS "commissionPercent",
+        v."maxDiscount",
+        v."minPurchase",
+        v."maxUsage",
+        v."usedCount",
+        v."isActive",
+        v."expiresAt",
+        v."description",
+        v."referrerName",
+        v."issuedToUserId",
+        v."issuedToName",
+        v."issuedToEmail",
+        v."issuedByUserId",
+        v."issuedByName",
+        v."issuedByEmail",
+        v."createdAt",
+        v."updatedAt",
+        COALESCE(u_to."name", v."issuedToName", v."referrerName") AS "resolvedIssuedToName",
+        COALESCE(u_to."email", v."issuedToEmail") AS "resolvedIssuedToEmail",
+        u_to."image" AS "resolvedIssuedToImage",
+        GREATEST(v."usedCount", COALESCE(pay_stats."confirmedCount", 0))::int AS "totalUsed",
+        COALESCE(pay_stats."totalRevenue", 0)::bigint AS "totalRevenue",
+        ROUND(COALESCE(pay_stats."totalRevenue", 0) * (COALESCE(v."commissionPercent", 0) / 100.0))::bigint AS "totalCommission",
+        (COALESCE(pay_stats."totalRevenue", 0) - ROUND(COALESCE(pay_stats."totalRevenue", 0) * (COALESCE(v."commissionPercent", 0) / 100.0)))::bigint AS "netRevenue"
+      FROM public."Voucher" v
+      LEFT JOIN public."user" u_to ON u_to."id" = v."issuedToUserId"
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS "confirmedCount",
+          COALESCE(SUM(p."amount"), 0)::bigint AS "totalRevenue"
+        FROM public."Payment" p
+        WHERE (p."voucherId" = v."id" OR UPPER(COALESCE(p."voucherCode", '')) = UPPER(v."code"))
+          AND p."status"::text = 'CONFIRMED'
+      ) pay_stats ON true
+      ORDER BY v."createdAt" DESC
     `);
-    return rows;
+    return (rows || []).map((r) => ({
+      ...r,
+      totalUsed: Number(r.totalUsed ?? 0),
+      totalRevenue: Number(r.totalRevenue ?? 0),
+      totalCommission: Number(r.totalCommission ?? 0),
+      netRevenue: Number(r.netRevenue ?? 0),
+    }));
   }
 
   async createVoucher(input: VoucherInput) {
@@ -942,21 +1018,35 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       SELECT "id" FROM public."Voucher" WHERE "code" = ${code} LIMIT 1
     `);
     if (existing[0]) {
-      throw new BadRequestException(`Kode voucher "${code}" sudah digunakan.`);
+      throw new BadRequestException(`Kode referal / voucher "${code}" sudah digunakan.`);
+    }
+
+    let issuedToName = input.issuedToName ? input.issuedToName.trim() : null;
+    let issuedToEmail = input.issuedToEmail ? input.issuedToEmail.trim() : null;
+    if (input.issuedToUserId && (!issuedToName || !issuedToEmail)) {
+      const u = await this.query<Array<{ name: string; email: string }>>(Prisma.sql`
+        SELECT "name", "email" FROM public."user" WHERE "id" = ${input.issuedToUserId} LIMIT 1
+      `);
+      if (u[0]) {
+        issuedToName = issuedToName || u[0].name;
+        issuedToEmail = issuedToEmail || u[0].email;
+      }
     }
 
     const id = randomUUID();
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
     const rows = await this.query(Prisma.sql`
       INSERT INTO public."Voucher" (
-        "id", "code", "discountPercent", "maxDiscount", "minPurchase",
+        "id", "code", "discountPercent", "commissionPercent", "maxDiscount", "minPurchase",
         "maxUsage", "usedCount", "isActive", "expiresAt",
-        "description", "referrerName", "createdAt", "updatedAt"
+        "description", "referrerName", "issuedToUserId", "issuedToName", "issuedToEmail",
+        "issuedByUserId", "issuedByName", "issuedByEmail", "createdAt", "updatedAt"
       )
       VALUES (
         ${id},
         ${code},
         ${Number(input.discountPercent)},
+        ${Number(input.commissionPercent ?? 0)},
         ${input.maxDiscount ?? null},
         ${Number(input.minPurchase ?? 0)},
         ${input.maxUsage ?? null},
@@ -964,7 +1054,13 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         ${input.isActive ?? true},
         ${expiresAt},
         ${input.description ?? null},
-        ${input.referrerName ?? null},
+        ${input.referrerName ?? issuedToName},
+        ${input.issuedToUserId ?? null},
+        ${issuedToName},
+        ${issuedToEmail},
+        ${input.issuedByUserId ?? null},
+        ${input.issuedByName ?? null},
+        ${input.issuedByEmail ?? null},
         CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP
       )
@@ -981,7 +1077,19 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         SELECT "id" FROM public."Voucher" WHERE "code" = ${cleanCode} AND "id" <> ${id} LIMIT 1
       `);
       if (conflict[0]) {
-        throw new BadRequestException(`Kode voucher "${cleanCode}" sudah digunakan.`);
+        throw new BadRequestException(`Kode referal / voucher "${cleanCode}" sudah digunakan.`);
+      }
+    }
+
+    let issuedToName = input.issuedToName ? input.issuedToName.trim() : null;
+    let issuedToEmail = input.issuedToEmail ? input.issuedToEmail.trim() : null;
+    if (input.issuedToUserId && (!issuedToName || !issuedToEmail)) {
+      const u = await this.query<Array<{ name: string; email: string }>>(Prisma.sql`
+        SELECT "name", "email" FROM public."user" WHERE "id" = ${input.issuedToUserId} LIMIT 1
+      `);
+      if (u[0]) {
+        issuedToName = issuedToName || u[0].name;
+        issuedToEmail = issuedToEmail || u[0].email;
       }
     }
 
@@ -993,6 +1101,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       UPDATE public."Voucher" SET
         "code" = COALESCE(${cleanCode}, "code"),
         "discountPercent" = COALESCE(${input.discountPercent !== undefined ? Number(input.discountPercent) : null}, "discountPercent"),
+        "commissionPercent" = COALESCE(${input.commissionPercent !== undefined ? Number(input.commissionPercent) : null}, "commissionPercent"),
         "maxDiscount" = CASE WHEN ${input.maxDiscount !== undefined} THEN ${input.maxDiscount ?? null} ELSE "maxDiscount" END,
         "minPurchase" = COALESCE(${input.minPurchase !== undefined ? Number(input.minPurchase) : null}, "minPurchase"),
         "maxUsage" = CASE WHEN ${input.maxUsage !== undefined} THEN ${input.maxUsage ?? null} ELSE "maxUsage" END,
@@ -1000,6 +1109,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "expiresAt" = CASE WHEN ${input.expiresAt !== undefined} THEN ${expiresAt} ELSE "expiresAt" END,
         "description" = CASE WHEN ${input.description !== undefined} THEN ${input.description ?? null} ELSE "description" END,
         "referrerName" = CASE WHEN ${input.referrerName !== undefined} THEN ${input.referrerName ?? null} ELSE "referrerName" END,
+        "issuedToUserId" = CASE WHEN ${input.issuedToUserId !== undefined} THEN ${input.issuedToUserId ?? null} ELSE "issuedToUserId" END,
+        "issuedToName" = CASE WHEN ${issuedToName !== null} THEN ${issuedToName} ELSE "issuedToName" END,
+        "issuedToEmail" = CASE WHEN ${issuedToEmail !== null} THEN ${issuedToEmail} ELSE "issuedToEmail" END,
         "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${id}
       RETURNING *
@@ -1364,7 +1476,13 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const rows = await this.query<Array<any>>(Prisma.sql`
       SELECT t."id", t."subtest", t."title", t."slug", t."order",
              json_agg(
-               json_build_object('id', s."id", 'title', s."title", 'slug', s."slug", 'order', s."order")
+               json_build_object(
+                 'id', s."id",
+                 'title', s."title",
+                 'slug', s."slug",
+                 'order', s."order",
+                 'patterns', COALESCE(s."patterns", '[]'::jsonb)
+               )
                ORDER BY s."order" ASC
              ) FILTER (WHERE s."id" IS NOT NULL) AS "subtopics"
       FROM public."Topic" t
@@ -1374,7 +1492,10 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     `);
     return rows.map((t) => ({
       ...t,
-      subtopics: t.subtopics || [],
+      subtopics: (t.subtopics || []).map((s: any) => ({
+        ...s,
+        patterns: Array.isArray(s.patterns) ? s.patterns : [],
+      })),
     }));
   }
 
@@ -1418,11 +1539,15 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const rawSlug = input.slug || cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
     const id = `sub-${rawSlug}-${Math.random().toString(36).substring(2, 6)}`;
     const order = Number(input.order) || 1;
+    const patterns = Array.isArray(input.patterns)
+      ? input.patterns.map((p: any) => String(p).trim()).filter(Boolean)
+      : [];
+    const patternsJson = JSON.stringify(patterns);
     await this.query(Prisma.sql`
-      INSERT INTO public."Subtopic" ("id", "topicId", "title", "slug", "order", "createdAt")
-      VALUES (${id}, ${input.topicId}, ${cleanTitle}, ${rawSlug}, ${order}, CURRENT_TIMESTAMP)
+      INSERT INTO public."Subtopic" ("id", "topicId", "title", "slug", "order", "patterns", "createdAt")
+      VALUES (${id}, ${input.topicId}, ${cleanTitle}, ${rawSlug}, ${order}, ${patternsJson}::jsonb, CURRENT_TIMESTAMP)
     `);
-    return { id, topicId: input.topicId, title: cleanTitle, slug: rawSlug, order };
+    return { id, topicId: input.topicId, title: cleanTitle, slug: rawSlug, order, patterns };
   }
 
   async updateSubtopic(id: string, input: any) {
@@ -1431,6 +1556,12 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (input.title) updates.push(Prisma.sql`"title" = ${input.title.trim()}`);
     if (input.slug) updates.push(Prisma.sql`"slug" = ${input.slug.trim()}`);
     if (input.order !== undefined) updates.push(Prisma.sql`"order" = ${Number(input.order)}`);
+    if (input.patterns !== undefined) {
+      const patterns = Array.isArray(input.patterns)
+        ? input.patterns.map((p: any) => String(p).trim()).filter(Boolean)
+        : [];
+      updates.push(Prisma.sql`"patterns" = ${JSON.stringify(patterns)}::jsonb`);
+    }
 
     if (updates.length > 0) {
       await this.query(Prisma.sql`
@@ -1468,6 +1599,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       SELECT 
         q."id", q."subtest", q."subtopic_id" AS "subtopicId", q."difficulty", q."type", 
         q."target", q."narration", q."content", q."imageUrl", q."points",
+        q."correct_answer_short_answer" AS "correctAnswer",
         q."createdAt", q."updatedAt",
         s."title" AS "subtopicTitle",
         t."title" AS "topicTitle",
@@ -1505,23 +1637,25 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const target = input.target || 'DRAFT';
     const difficulty = input.difficulty || 'MEDIUM';
     const rawType = input.type || 'PILIHAN_GANDA';
-    const type = rawType === 'MULTIPLE_CHOICE' ? 'PILIHAN_GANDA' : rawType;
+    const type = (rawType === 'SHORT_ANSWER' || rawType === 'ISIAN_SINGKAT') ? 'ISIAN_SINGKAT' : 'PILIHAN_GANDA';
     const isTryoutOnly = target === 'FOR_TRYOUT';
+    const correctAnswer = input.correctAnswer !== undefined && input.correctAnswer !== null ? String(input.correctAnswer).trim() : null;
 
     await this.query(Prisma.sql`
       INSERT INTO public."Question" (
         "id", "subtest", "subtopic_id", "difficulty", "type", "target", 
-        "narration", "content", "imageUrl", "points", "isTryoutOnly", "createdAt", "updatedAt"
+        "narration", "content", "imageUrl", "points", "correct_answer_short_answer", "isTryoutOnly", "createdAt", "updatedAt"
       ) VALUES (
         ${questionId}, ${input.subtest}, ${input.subtopicId || null}, ${difficulty}, 
         CAST(${type} AS public."QuestionType"), ${target},
         ${input.narration || null}, ${input.content}, ${input.imageUrl || null}, ${input.points || 1},
-        ${isTryoutOnly}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ${correctAnswer}, ${isTryoutOnly}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
     `);
 
-    if (Array.isArray(input.options) && input.options.length > 0) {
+    if (type !== 'ISIAN_SINGKAT' && Array.isArray(input.options) && input.options.length > 0) {
       for (const opt of input.options) {
+        if (!opt.content && !opt.isCorrect) continue;
         await this.query(Prisma.sql`
           INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
           VALUES (${randomUUID()}, ${questionId}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
@@ -1530,7 +1664,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }
 
     const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
-    if (stepsJson || input.quickTrick || input.staticExplanation) {
+    if (stepsJson || input.quickTrick || input.staticExplanation || input.keyFormula) {
       await this.query(Prisma.sql`
         INSERT INTO public."QuestionSolution" (
           "id", "questionId", "steps", "staticContent", "quickTrick", "keyFormula", "createdAt", "updatedAt"
@@ -1548,18 +1682,22 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   async updateQuestion(id: string, input: any) {
     const target = input.target;
     const isTryoutOnly = target === 'FOR_TRYOUT';
+    const rawType = input.type;
+    const type = rawType ? ((rawType === 'SHORT_ANSWER' || rawType === 'ISIAN_SINGKAT') ? 'ISIAN_SINGKAT' : 'PILIHAN_GANDA') : undefined;
+    const correctAnswer = input.correctAnswer !== undefined ? (input.correctAnswer !== null ? String(input.correctAnswer).trim() : null) : undefined;
 
     await this.query(Prisma.sql`
       UPDATE public."Question" SET
         "subtest" = COALESCE(${input.subtest ?? null}, "subtest"),
         "subtopic_id" = CASE WHEN ${input.subtopicId !== undefined} THEN ${input.subtopicId || null} ELSE "subtopic_id" END,
         "difficulty" = COALESCE(${input.difficulty ?? null}, "difficulty"),
-        "type" = CASE WHEN ${input.type !== undefined} THEN CAST(${input.type === 'MULTIPLE_CHOICE' ? 'PILIHAN_GANDA' : input.type} AS public."QuestionType") ELSE "type" END,
+        "type" = CASE WHEN ${type !== undefined} THEN CAST(${type} AS public."QuestionType") ELSE "type" END,
         "target" = COALESCE(${input.target ?? null}, "target"),
         "narration" = CASE WHEN ${input.narration !== undefined} THEN ${input.narration || null} ELSE "narration" END,
         "content" = COALESCE(${input.content ?? null}, "content"),
         "imageUrl" = CASE WHEN ${input.imageUrl !== undefined} THEN ${input.imageUrl || null} ELSE "imageUrl" END,
         "points" = COALESCE(${input.points ?? null}, "points"),
+        "correct_answer_short_answer" = CASE WHEN ${correctAnswer !== undefined} THEN ${correctAnswer} ELSE "correct_answer_short_answer" END,
         "isTryoutOnly" = CASE WHEN ${target !== undefined} THEN ${isTryoutOnly} ELSE "isTryoutOnly" END,
         "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${id}
@@ -1567,23 +1705,27 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     if (Array.isArray(input.options)) {
       await this.query(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
-      for (const opt of input.options) {
-        await this.query(Prisma.sql`
-          INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
-          VALUES (${randomUUID()}, ${id}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
-        `);
+      if (type !== 'ISIAN_SINGKAT') {
+        for (const opt of input.options) {
+          if (!opt.content && !opt.isCorrect) continue;
+          await this.query(Prisma.sql`
+            INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
+            VALUES (${randomUUID()}, ${id}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
+          `);
+        }
       }
     }
 
-    if (input.solutionSteps !== undefined || input.quickTrick !== undefined || input.staticExplanation !== undefined) {
+    if (input.solutionSteps !== undefined || input.quickTrick !== undefined || input.staticExplanation !== undefined || input.keyFormula !== undefined) {
       const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
       await this.query(Prisma.sql`
-        INSERT INTO public."QuestionSolution" ("id", "questionId", "steps", "staticContent", "quickTrick", "createdAt", "updatedAt")
-        VALUES (${randomUUID()}, ${id}, CAST(${stepsJson} AS jsonb), ${input.staticExplanation || null}, ${input.quickTrick || null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO public."QuestionSolution" ("id", "questionId", "steps", "staticContent", "quickTrick", "keyFormula", "createdAt", "updatedAt")
+        VALUES (${randomUUID()}, ${id}, CAST(${stepsJson} AS jsonb), ${input.staticExplanation || null}, ${input.quickTrick || null}, ${input.keyFormula || null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT ("questionId") DO UPDATE SET
           "steps" = CASE WHEN ${stepsJson !== null} THEN CAST(${stepsJson} AS jsonb) ELSE "QuestionSolution"."steps" END,
           "staticContent" = CASE WHEN ${input.staticExplanation !== undefined} THEN ${input.staticExplanation || null} ELSE "QuestionSolution"."staticContent" END,
           "quickTrick" = CASE WHEN ${input.quickTrick !== undefined} THEN ${input.quickTrick || null} ELSE "QuestionSolution"."quickTrick" END,
+          "keyFormula" = CASE WHEN ${input.keyFormula !== undefined} THEN ${input.keyFormula || null} ELSE "QuestionSolution"."keyFormula" END,
           "updatedAt" = CURRENT_TIMESTAMP
       `);
     }

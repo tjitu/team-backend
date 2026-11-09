@@ -93,7 +93,7 @@ export class ControlCenterController {
 
   @Post('discounts')
   createDiscount(@Req() request: AuthenticatedRequest, @Body() body: CreateDiscountControlDto) {
-    return this.controlCenter.createDiscount(request.user.id, body);
+    return this.controlCenter.createDiscount(request.user.id, body, request.user);
   }
 
   @Patch('discounts/:id')
@@ -117,7 +117,7 @@ export class ControlCenterController {
 
   @Post('vouchers')
   createVoucher(@Req() request: AuthenticatedRequest, @Body() body: CreateVoucherControlDto) {
-    return this.controlCenter.createVoucher(request.user.id, body);
+    return this.controlCenter.createVoucher(request.user.id, body, request.user);
   }
 
   @Patch('vouchers/:id')

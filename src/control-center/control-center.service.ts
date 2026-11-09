@@ -151,14 +151,19 @@ export class ControlCenterService {
     return this.jituManagement.listDiscounts();
   }
 
-  async createDiscount(userId: string, input: DiscountInput) {
+  async createDiscount(userId: string, input: DiscountInput, userMeta?: { name?: string; email?: string }) {
     await this.requireAdministrator(userId);
     const start = new Date(input.startDate).getTime();
     const end = new Date(input.endDate).getTime();
     if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
       throw new BadRequestException('Discount end date must be after its start date.');
     }
-    return this.jituManagement.createDiscount(input);
+    return this.jituManagement.createDiscount({
+      ...input,
+      issuedByUserId: input.issuedByUserId || userId,
+      issuedByName: input.issuedByName || userMeta?.name || 'Admin',
+      issuedByEmail: input.issuedByEmail || userMeta?.email,
+    });
   }
 
   async updateDiscount(userId: string, id: string, input: Partial<DiscountInput>) {
@@ -187,9 +192,14 @@ export class ControlCenterService {
     return this.jituManagement.listVouchers();
   }
 
-  async createVoucher(userId: string, input: VoucherInput) {
+  async createVoucher(userId: string, input: VoucherInput, userMeta?: { name?: string; email?: string }) {
     await this.requireAdministrator(userId);
-    return this.jituManagement.createVoucher(input);
+    return this.jituManagement.createVoucher({
+      ...input,
+      issuedByUserId: input.issuedByUserId || userId,
+      issuedByName: input.issuedByName || userMeta?.name || 'Admin',
+      issuedByEmail: input.issuedByEmail || userMeta?.email,
+    });
   }
 
   async updateVoucher(userId: string, id: string, input: Partial<VoucherInput>) {

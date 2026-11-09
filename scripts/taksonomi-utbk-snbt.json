@@ -1,0 +1,456 @@
+[
+  {
+    "subtest": "PENALARAN_UMUM",
+    "title": "Penalaran Induktif",
+    "slug": "penalaran-induktif",
+    "order": 1,
+    "subtopics": [
+      {"title": "Generalisasi dan Penarikan Kesimpulan Umum", "slug": "generalisasi-dan-penarikan-kesimpulan-umum", "order": 1, "patterns": ["Generalisasi dari Sampel Kasus ke Populasi", "Identifikasi Generalisasi Tergesa-gesa dan Bias Sampel", "Penentuan Kesimpulan Paling Mungkin dari Sekumpulan Fakta"]},
+      {"title": "Analogi dan Penalaran Analogis", "slug": "analogi-dan-penalaran-analogis", "order": 2, "patterns": ["Analogi Hubungan Antarkonsep", "Analogi Struktur Argumen", "Evaluasi Kesamaan Relevan Antara Dua Kasus", "Pernyataan yang Memperkuat atau Memperlemah Analogi"]},
+      {"title": "Hubungan Sebab-Akibat", "slug": "hubungan-sebab-akibat", "order": 3, "patterns": ["Analisis Sebab-Akibat Berdasarkan Data Infografis", "Membedakan Korelasi dan Kausalitas", "Penentuan Faktor Penyebab Dominan vs Pendukung", "Identifikasi Rantai Sebab-Akibat Bertingkat"]},
+      {"title": "Hipotesis dan Prediksi", "slug": "hipotesis-dan-prediksi", "order": 4, "patterns": ["Pemilihan Hipotesis Terbaik yang Menjelaskan Fakta", "Prediksi Berdasarkan Tren Data", "Pengujian Hipotesis dengan Bukti Baru"]},
+      {"title": "Interpretasi Data Tabel, Grafik, dan Infografis", "slug": "interpretasi-data-tabel-grafik-dan-infografis", "order": 5, "patterns": ["Pembacaan Tabel dan Grafik Multi-Variabel", "Inferensi dari Data Infografis", "Identifikasi Data yang Relevan, Tidak Relevan, atau Tidak Cukup"]},
+      {"title": "Penguatan dan Pelemahan Argumen", "slug": "penguatan-dan-pelemahan-argumen", "order": 6, "patterns": ["Pernyataan yang Memperkuat Kesimpulan", "Pernyataan yang Melemahkan Kesimpulan", "Identifikasi Asumsi Tersembunyi Argumen", "Pencarian Penjelasan Alternatif"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_UMUM",
+    "title": "Penalaran Deduktif",
+    "slug": "penalaran-deduktif",
+    "order": 2,
+    "subtopics": [
+      {"title": "Logika Proposisional dan Pernyataan Majemuk", "slug": "logika-proposisional-dan-pernyataan-majemuk", "order": 1, "patterns": ["Konjungsi, Disjungsi, dan Implikasi dalam Konteks Kalimat Sehari-hari", "Negasi dan Ekuivalensi Pernyataan Majemuk", "Konvers, Invers, dan Kontraposisi"]},
+      {"title": "Silogisme", "slug": "silogisme", "order": 2, "patterns": ["Silogisme Kategorik", "Silogisme Hipotetis", "Silogisme Disjungtif", "Simpulan Logis Bertingkat dari Banyak Premis"]},
+      {"title": "Modus Ponens, Modus Tollens, dan Penarikan Kesimpulan Valid", "slug": "modus-ponens-modus-tollens-dan-penarikan-kesimpulan-valid", "order": 3, "patterns": ["Simpulan Logis Bertingkat (Modus Tollens / Silogisme Hipotetis)", "Penentuan Kesimpulan yang Pasti Benar vs Mungkin Benar", "Evaluasi Validitas Argumen"]},
+      {"title": "Kuantor dan Diagram Venn", "slug": "kuantor-dan-diagram-venn", "order": 4, "patterns": ["Negasi Pernyataan Berkuantor (Semua, Beberapa, Tidak Ada)", "Representasi Premis dengan Diagram Venn/Euler", "Penentuan Pernyataan yang Pasti Benar dari Himpunan Premis"]},
+      {"title": "Penalaran Analitik: Urutan dan Posisi", "slug": "penalaran-analitik-urutan-dan-posisi", "order": 5, "patterns": ["Susunan Linear (Antrean/Barisan)", "Susunan Melingkar", "Penentuan Posisi dari Petunjuk Relatif Bersyarat"]},
+      {"title": "Penalaran Analitik: Pengelompokan, Penjadwalan, dan Tabel Logika", "slug": "penalaran-analitik-pengelompokan-penjadwalan-dan-tabel-logika", "order": 6, "patterns": ["Pengelompokan dan Seleksi dengan Syarat", "Penjadwalan Bersyarat", "Matriks Logika Pencocokan Atribut", "Pengandaian Tambahan 'Jika X maka ...'"]},
+      {"title": "Kekeliruan Penalaran dan Premis Tersembunyi", "slug": "kekeliruan-penalaran-dan-premis-tersembunyi", "order": 7, "patterns": ["Identifikasi Kesesatan Logika (Fallacy)", "Penentuan Premis yang Hilang (Entimem)", "Argumen Sejajar dengan Pola Penalaran yang Sama"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_UMUM",
+    "title": "Penalaran Kuantitatif Sederhana",
+    "slug": "penalaran-kuantitatif-sederhana",
+    "order": 3,
+    "subtopics": [
+      {"title": "Pola Barisan Bilangan", "slug": "pola-barisan-bilangan", "order": 1, "patterns": ["Pola Aritmetika dan Geometri Sederhana", "Pola Bertingkat (Selisih Berlapis)", "Pola Bergantian dan Pola Fibonacci-like"]},
+      {"title": "Pola Huruf, Simbol, dan Bangun", "slug": "pola-huruf-simbol-dan-bangun", "order": 2, "patterns": ["Pola Urutan Alfabet", "Pola Matriks Bilangan/Simbol", "Pola Perubahan Bangun dan Rotasi"]},
+      {"title": "Hitungan Logis Sederhana", "slug": "hitungan-logis-sederhana", "order": 3, "patterns": ["Perbandingan dan Persentase dalam Konteks Singkat", "Soal Usia, Jarak, dan Kecepatan Logis", "Estimasi dan Pembulatan Logis"]},
+      {"title": "Penalaran Himpunan dan Kombinatorika Sederhana", "slug": "penalaran-himpunan-dan-kombinatorika-sederhana", "order": 4, "patterns": ["Irisan dan Gabungan dalam Cerita", "Pencacahan Susunan dan Pilihan Sederhana", "Prinsip Inklusi-Eksklusi Informal"]},
+      {"title": "Analisis Data Kuantitatif Tabel dan Grafik", "slug": "analisis-data-kuantitatif-tabel-dan-grafik", "order": 5, "patterns": ["Perbandingan Nilai Antar Kategori", "Perhitungan Perubahan dan Persentase Pertumbuhan", "Pengambilan Keputusan Berdasarkan Data Kuantitatif"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Bilangan dan Operasi Hitung",
+    "slug": "bilangan-dan-operasi-hitung",
+    "order": 1,
+    "subtopics": [
+      {"title": "Bilangan Bulat, Pecahan, dan Desimal", "slug": "bilangan-bulat-pecahan-dan-desimal", "order": 1, "patterns": ["Kelincahan Operasi Hitung dan Estimasi", "Perbandingan dan Pengurutan Bilangan", "Penyederhanaan Bentuk Pecahan Bersusun"]},
+      {"title": "Eksponen dan Bentuk Akar", "slug": "eksponen-dan-bentuk-akar", "order": 2, "patterns": ["Sifat Eksponen dan Penyederhanaan", "Merasionalkan Penyebut", "Perbandingan Nilai Bentuk Akar dan Pangkat"]},
+      {"title": "Logaritma", "slug": "logaritma-dasar", "order": 3, "patterns": ["Sifat-sifat Logaritma dan Perubahan Basis", "Persamaan Logaritma Sederhana", "Estimasi Nilai Logaritma"]},
+      {"title": "Teori Bilangan", "slug": "teori-bilangan", "order": 4, "patterns": ["FPB, KPK, dan Faktorisasi Prima", "Sisa Pembagian dan Kongruensi Sederhana", "Digit Satuan dan Pola Pangkat", "Banyak Faktor dan Bilangan Prima"]},
+      {"title": "Perbandingan, Persentase, dan Rata-rata Dasar", "slug": "perbandingan-persentase-dan-rata-rata-dasar", "order": 5, "patterns": ["Perbandingan Senilai dan Berbalik Nilai", "Persentase Bertingkat", "Rata-rata Gabungan"]},
+      {"title": "Barisan dan Deret", "slug": "barisan-dan-deret-dasar", "order": 6, "patterns": ["Suku ke-n dan Jumlah Deret Aritmetika/Geometri", "Deret Tak Hingga Konvergen", "Sisipan dan Barisan Bertingkat"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Aljabar dan Fungsi Dasar",
+    "slug": "aljabar-dan-fungsi-dasar",
+    "order": 2,
+    "subtopics": [
+      {"title": "Persamaan dan Pertidaksamaan Linear", "slug": "persamaan-dan-pertidaksamaan-linear", "order": 1, "patterns": ["Manipulasi Aljabar Cepat", "Penyelesaian Pertidaksamaan dan Himpunan Penyelesaian", "Sistem Persamaan Linear Dua/Tiga Variabel"]},
+      {"title": "Persamaan dan Pertidaksamaan Kuadrat", "slug": "persamaan-dan-pertidaksamaan-kuadrat", "order": 2, "patterns": ["Akar-akar dan Hubungan Jumlah-Hasil Kali Akar", "Diskriminan dan Jenis Akar", "Fungsi Kuadrat dan Titik Puncak", "Himpunan Penyelesaian Pertidaksamaan Kuadrat"]},
+      {"title": "Nilai Mutlak dan Pertidaksamaan Rasional/Irasional", "slug": "nilai-mutlak-dan-pertidaksamaan-rasional-irasional", "order": 3, "patterns": ["Persamaan dan Pertidaksamaan Nilai Mutlak", "Pertidaksamaan Pecahan dengan Syarat Penyebut", "Pertidaksamaan Bentuk Akar dengan Syarat Domain"]},
+      {"title": "Fungsi, Komposisi, dan Invers", "slug": "fungsi-komposisi-dan-invers-dasar", "order": 4, "patterns": ["Domain, Range, dan Sifat Fungsi", "Komposisi dan Invers Fungsi", "Transformasi Grafik Fungsi"]},
+      {"title": "Polinomial", "slug": "polinomial-dasar", "order": 5, "patterns": ["Teorema Sisa dan Teorema Faktor", "Pembagian Suku Banyak", "Akar-akar Polinomial"]},
+      {"title": "Eksponensial dan Logaritma Aljabar", "slug": "persamaan-eksponensial-dan-logaritma-aljabar", "order": 6, "patterns": ["Persamaan Eksponensial", "Pertidaksamaan Eksponensial dan Logaritma", "Grafik Fungsi Eksponensial dan Logaritma"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Geometri dan Pengukuran Dasar",
+    "slug": "geometri-dan-pengukuran-dasar",
+    "order": 3,
+    "subtopics": [
+      {"title": "Bangun Datar", "slug": "bangun-datar", "order": 1, "patterns": ["Keliling dan Luas Gabungan Bangun", "Segitiga, Segiempat, dan Sifat-sifatnya", "Lingkaran, Juring, dan Garis Singgung"]},
+      {"title": "Kesebangunan, Kekongruenan, dan Teorema Pythagoras", "slug": "kesebangunan-kekongruenan-dan-teorema-pythagoras", "order": 2, "patterns": ["Perbandingan Sisi pada Segitiga Sebangun", "Teorema Pythagoras dan Tripel Pythagoras", "Garis Berat, Garis Bagi, dan Garis Tinggi"]},
+      {"title": "Bangun Ruang", "slug": "bangun-ruang", "order": 3, "patterns": ["Volume dan Luas Permukaan Bangun Ruang", "Jarak Titik, Garis, dan Bidang", "Sudut antara Garis dan Bidang", "Irisan Bangun Ruang"]},
+      {"title": "Geometri Koordinat", "slug": "geometri-koordinat", "order": 4, "patterns": ["Persamaan Garis dan Hubungan Dua Garis", "Persamaan Lingkaran dan Posisi Titik/Garis", "Jarak Titik ke Garis dan Pola Grafik"]},
+      {"title": "Transformasi Geometri dan Vektor Dasar", "slug": "transformasi-geometri-dan-vektor-dasar", "order": 5, "patterns": ["Translasi, Refleksi, Rotasi, Dilatasi", "Operasi Vektor dan Panjang Vektor", "Proyeksi dan Perkalian Skalar"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Statistika dan Peluang Dasar",
+    "slug": "statistika-dan-peluang-dasar",
+    "order": 4,
+    "subtopics": [
+      {"title": "Statistika Deskriptif", "slug": "statistika-deskriptif-dasar", "order": 1, "patterns": ["Rata-rata, Median, Modus Data Tunggal dan Kelompok", "Kuartil, Jangkauan, dan Simpangan Baku", "Pengaruh Perubahan Data terhadap Ukuran Pemusatan"]},
+      {"title": "Kaidah Pencacahan dan Kombinatorika", "slug": "kaidah-pencacahan-dan-kombinatorika", "order": 2, "patterns": ["Permutasi dan Kombinasi", "Permutasi dengan Unsur Sama dan Melingkar", "Pencacahan Bersyarat"]},
+      {"title": "Peluang", "slug": "peluang-dasar", "order": 3, "patterns": ["Peluang Kejadian Majemuk", "Peluang Bersyarat dan Kejadian Saling Bebas", "Peluang Komplemen"]},
+      {"title": "Himpunan dan Diagram Venn", "slug": "himpunan-dan-diagram-venn-murni", "order": 4, "patterns": ["Operasi Himpunan", "Banyak Anggota Gabungan Tiga Himpunan", "Himpunan Bagian dan Himpunan Kuasa"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Trigonometri dan Kalkulus Dasar",
+    "slug": "trigonometri-dan-kalkulus-dasar",
+    "order": 5,
+    "subtopics": [
+      {"title": "Trigonometri Dasar", "slug": "trigonometri-dasar-murni", "order": 1, "patterns": ["Perbandingan Trigonometri Sudut Istimewa", "Identitas Trigonometri", "Persamaan Trigonometri Sederhana"]},
+      {"title": "Aturan Sinus dan Kosinus", "slug": "aturan-sinus-dan-kosinus", "order": 2, "patterns": ["Penentuan Sisi/Sudut Segitiga Sembarang", "Luas Segitiga dengan Fungsi Sinus"]},
+      {"title": "Limit Fungsi", "slug": "limit-fungsi-dasar", "order": 3, "patterns": ["Limit Bentuk Tak Tentu 0/0 dan Tak Hingga", "Limit Fungsi Trigonometri", "Kekontinuan Fungsi"]},
+      {"title": "Turunan Fungsi", "slug": "turunan-fungsi-dasar", "order": 4, "patterns": ["Aturan Turunan dan Aturan Rantai", "Garis Singgung dan Kemonotonan", "Nilai Ekstrem dan Titik Belok"]},
+      {"title": "Integral", "slug": "integral-dasar", "order": 5, "patterns": ["Integral Tak Tentu dan Substitusi", "Integral Tentu dan Sifatnya", "Luas Daerah di Bawah Kurva"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Kecukupan Data",
+    "slug": "kecukupan-data",
+    "order": 6,
+    "subtopics": [
+      {"title": "Kecukupan Data Bilangan dan Aljabar", "slug": "kecukupan-data-bilangan-dan-aljabar", "order": 1, "patterns": ["Kecukupan Data (Pernyataan 1 dan 2)", "Penentuan Nilai Tunggal dari Persamaan/Pertidaksamaan", "Kecukupan Data Teori Bilangan (Paritas, Faktor, Sisa)"]},
+      {"title": "Kecukupan Data Geometri", "slug": "kecukupan-data-geometri", "order": 2, "patterns": ["Kecukupan Data Panjang, Luas, dan Sudut", "Kecukupan Data Kesebangunan dan Pythagoras", "Kecukupan Data Geometri Koordinat"]},
+      {"title": "Kecukupan Data Statistika dan Peluang", "slug": "kecukupan-data-statistika-dan-peluang", "order": 3, "patterns": ["Kecukupan Data Rata-rata, Median, dan Modus", "Kecukupan Data Peluang dan Pencacahan"]},
+      {"title": "Kecukupan Data Fungsi dan Barisan", "slug": "kecukupan-data-fungsi-dan-barisan", "order": 4, "patterns": ["Kecukupan Data Parameter Fungsi", "Kecukupan Data Suku dan Jumlah Barisan/Deret"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_KUANTITATIF",
+    "title": "Hubungan Kuantitas P vs Q",
+    "slug": "hubungan-kuantitas-p-vs-q",
+    "order": 7,
+    "subtopics": [
+      {"title": "Perbandingan Kuantitas Bilangan dan Aljabar", "slug": "perbandingan-kuantitas-bilangan-dan-aljabar", "order": 1, "patterns": ["Hubungan Kuantitas (Perbandingan Nilai P vs Q)", "Perbandingan Tanpa Menghitung Penuh (Estimasi dan Selisih)", "Kasus Batas dan Pengujian Nilai Variabel"]},
+      {"title": "Perbandingan Kuantitas Geometri", "slug": "perbandingan-kuantitas-geometri", "order": 2, "patterns": ["Perbandingan Luas dan Keliling Bangun", "Perbandingan Besar Sudut dan Panjang Sisi"]},
+      {"title": "Perbandingan Kuantitas Statistika dan Peluang", "slug": "perbandingan-kuantitas-statistika-dan-peluang", "order": 3, "patterns": ["Perbandingan Ukuran Pemusatan dan Penyebaran", "Perbandingan Peluang Dua Kejadian"]},
+      {"title": "Perbandingan Kuantitas Fungsi dan Bentuk Pangkat", "slug": "perbandingan-kuantitas-fungsi-dan-bentuk-pangkat", "order": 4, "patterns": ["Perbandingan Nilai Fungsi pada Dua Titik", "Perbandingan Bentuk Eksponen, Akar, dan Logaritma"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Pemodelan Aljabar dan Fungsi",
+    "slug": "pemodelan-aljabar-dan-fungsi",
+    "order": 1,
+    "subtopics": [
+      {"title": "Persamaan dan Pertidaksamaan Linear-Kuadrat", "slug": "persamaan-dan-pertidaksamaan-linear-kuadrat", "order": 1, "patterns": ["Pemodelan Biaya dan Keuntungan Nyata", "Analisis Titik Potong dan Daerah Hasil", "Aplikasi Titik Ekstrem (Maksimum/Minimum)"]},
+      {"title": "Fungsi Komposisi dan Invers", "slug": "fungsi-komposisi-dan-invers", "order": 2, "patterns": ["Dekomposisi Fungsi Multi-Proses Kontekstual", "Pembalikan Output ke Input Awal (Fungsi Invers)"]},
+      {"title": "Sistem Persamaan dan Program Linear", "slug": "sistem-persamaan-dan-program-linear", "order": 3, "patterns": ["Pemodelan Sistem Persamaan dari Soal Cerita", "Optimasi Produksi dengan Kendala (Program Linear)", "Penentuan Daerah Layak dan Titik Pojok"]},
+      {"title": "Fungsi Eksponensial dan Logaritma Kontekstual", "slug": "fungsi-eksponensial-dan-logaritma-kontekstual", "order": 4, "patterns": ["Pertumbuhan dan Peluruhan (Populasi, Radioaktif)", "Skala Logaritmik (pH, Richter, Desibel)", "Penentuan Waktu atau Parameter dari Model Eksponensial"]},
+      {"title": "Fungsi Bertahap, Mutlak, dan Rasional Kontekstual", "slug": "fungsi-bertahap-mutlak-dan-rasional-kontekstual", "order": 5, "patterns": ["Tarif Bertingkat (Fungsi Sepotong-sepotong)", "Jarak/Selisih dengan Nilai Mutlak", "Model Rasional (Rata-rata Biaya dan Konsentrasi)"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Aritmetika Sosial dan Keuangan",
+    "slug": "aritmetika-sosial-dan-keuangan",
+    "order": 2,
+    "subtopics": [
+      {"title": "Persentase, Untung-Rugi, Diskon, dan Pajak", "slug": "persentase-untung-rugi-diskon-dan-pajak", "order": 1, "patterns": ["Pemodelan Harga Jual, Diskon Bertingkat, dan Pajak", "Perbandingan Penawaran Terbaik", "Break-even Point Sederhana"]},
+      {"title": "Bunga Tunggal, Bunga Majemuk, dan Anuitas", "slug": "bunga-tunggal-bunga-majemuk-dan-anuitas", "order": 2, "patterns": ["Perbandingan Skema Pinjaman dan Tabungan", "Perhitungan Nilai Akhir dan Nilai Sekarang", "Cicilan dan Angsuran Berbasis Deret"]},
+      {"title": "Perbandingan, Skala, dan Konversi Satuan", "slug": "perbandingan-skala-dan-konversi-satuan", "order": 3, "patterns": ["Perbandingan Senilai/Berbalik Nilai Kontekstual", "Skala Peta dan Denah", "Konversi Kurs dan Satuan Ukur"]},
+      {"title": "Kecepatan, Debit, dan Pekerjaan", "slug": "kecepatan-debit-dan-pekerjaan", "order": 4, "patterns": ["Dua Benda Bergerak (Berpapasan/Menyusul)", "Debit Air dan Kerja Bersama", "Kecepatan Rata-rata Perjalanan Multi-etape"]},
+      {"title": "Barisan dan Deret Kontekstual", "slug": "barisan-dan-deret-kontekstual", "order": 5, "patterns": ["Pemodelan Pola Tabungan, Produksi, dan Angsuran", "Deret Geometri dalam Pertumbuhan dan Penyusutan", "Deret Tak Hingga Kontekstual (Pantulan Bola)"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Geometri dan Pengukuran Kontekstual",
+    "slug": "geometri-dan-pengukuran-kontekstual",
+    "order": 3,
+    "subtopics": [
+      {"title": "Bangun Datar dan Bangun Ruang Kontekstual", "slug": "bangun-datar-dan-bangun-ruang-kontekstual", "order": 1, "patterns": ["Optimasi Bahan dan Biaya Pembuatan Wadah", "Estimasi Luas dan Volume Objek Nyata", "Pola Grafik & Analisis Geometri"]},
+      {"title": "Trigonometri Aplikatif", "slug": "trigonometri-aplikatif", "order": 2, "patterns": ["Sudut Elevasi/Depresi dan Pengukuran Tinggi/Jarak", "Aturan Sinus-Kosinus dalam Navigasi dan Survei", "Model Gelombang dan Fenomena Periodik"]},
+      {"title": "Transformasi Geometri dan Vektor Kontekstual", "slug": "transformasi-geometri-dan-vektor-kontekstual", "order": 3, "patterns": ["Pergeseran dan Pencerminan Objek pada Peta/Layar", "Resultan Gaya dan Perpindahan", "Penskalaan Gambar dan Desain"]},
+      {"title": "Geometri Koordinat Kontekstual", "slug": "geometri-koordinat-kontekstual", "order": 4, "patterns": ["Lintasan dan Posisi pada Bidang Koordinat", "Jarak Terdekat/Lokasi Optimal", "Pemodelan Lingkaran dalam Jangkauan Sinyal"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Kalkulus Terapan",
+    "slug": "kalkulus-terapan",
+    "order": 4,
+    "subtopics": [
+      {"title": "Limit dan Laju Perubahan", "slug": "limit-dan-laju-perubahan", "order": 1, "patterns": ["Interpretasi Laju Perubahan Rata-rata vs Sesaat", "Perilaku Jangka Panjang Model (Limit Tak Hingga)"]},
+      {"title": "Turunan dan Optimasi", "slug": "turunan-dan-optimasi", "order": 2, "patterns": ["Aplikasi Titik Ekstrem pada Biaya, Keuntungan, dan Dimensi", "Kecepatan dan Percepatan dari Fungsi Posisi", "Analisis Grafik Fungsi dan Turunannya"]},
+      {"title": "Integral dan Akumulasi", "slug": "integral-dan-akumulasi", "order": 3, "patterns": ["Luas Daerah dan Total Akumulasi dari Laju", "Jarak Tempuh dari Fungsi Kecepatan", "Rata-rata Nilai Fungsi pada Interval"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Statistika dan Peluang Kontekstual",
+    "slug": "statistika-dan-peluang-kontekstual",
+    "order": 5,
+    "subtopics": [
+      {"title": "Statistika Deskriptif dan Interpretasi Data", "slug": "statistika-deskriptif-dan-interpretasi-data", "order": 1, "patterns": ["Analisis Data Tren pada Tabel, Histogram, dan Diagram Kotak", "Pemilihan Ukuran Pemusatan yang Tepat", "Dampak Pencilan dan Perubahan Data terhadap Statistik"]},
+      {"title": "Peluang dan Kombinatorika Kontekstual", "slug": "peluang-dan-kombinatorika-kontekstual", "order": 2, "patterns": ["Peluang Kejadian Majemuk dalam Situasi Nyata", "Peluang Bersyarat dan Teorema Bayes Sederhana", "Pencacahan Susunan dan Pemilihan Tim/Kode"]},
+      {"title": "Distribusi Peluang, Distribusi Normal, dan Sampling", "slug": "distribusi-peluang-distribusi-normal-dan-sampling", "order": 3, "patterns": ["Peluang Binomial pada Percobaan Berulang", "Penggunaan Distribusi Normal dan Aturan Empiris", "Ekspektasi Nilai dalam Pengambilan Keputusan"]},
+      {"title": "Regresi, Korelasi, dan Prediksi Tren", "slug": "regresi-korelasi-dan-prediksi-tren", "order": 4, "patterns": ["Interpretasi Garis Tren dan Ekstrapolasi", "Korelasi dan Kekuatan Hubungan Data", "Evaluasi Kewajaran Prediksi"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Matriks dan Pemodelan Diskrit",
+    "slug": "matriks-dan-pemodelan-diskrit",
+    "order": 6,
+    "subtopics": [
+      {"title": "Matriks dan Determinan Aplikatif", "slug": "matriks-dan-determinan-aplikatif", "order": 1, "patterns": ["Penyajian Data Stok/Harga dalam Matriks", "Sistem Persamaan via Invers Matriks", "Transformasi Titik dengan Matriks"]},
+      {"title": "Himpunan dan Logika Matematika Kontekstual", "slug": "himpunan-dan-logika-matematika-kontekstual", "order": 2, "patterns": ["Diagram Venn dalam Survei dan Preferensi", "Pernyataan Bersyarat dalam Aturan Nyata"]},
+      {"title": "Graf dan Optimasi Jaringan Sederhana", "slug": "graf-dan-optimasi-jaringan-sederhana", "order": 3, "patterns": ["Jalur Terpendek dan Biaya Minimum", "Penjadwalan dan Keterurutan Tugas"]}
+    ]
+  },
+  {
+    "subtest": "PENALARAN_MATEMATIKA",
+    "title": "Pemecahan Masalah Matematis Non-Rutin",
+    "slug": "pemecahan-masalah-matematis-non-rutin",
+    "order": 7,
+    "subtopics": [
+      {"title": "Pemodelan dan Strategi Penyelesaian", "slug": "pemodelan-dan-strategi-penyelesaian", "order": 1, "patterns": ["Pemodelan Kontekstual Soal Cerita", "Pemilihan Strategi (Pemisalan, Kasus, Pola)", "Penyederhanaan Masalah Multi-Langkah"]},
+      {"title": "Generalisasi Pola dan Penalaran Matematis", "slug": "generalisasi-pola-dan-penalaran-matematis", "order": 2, "patterns": ["Penemuan dan Generalisasi Pola dari Kasus Kecil", "Pembenaran Klaim Matematis (Benar/Salah/Tidak Pasti)"]},
+      {"title": "Evaluasi Model dan Interpretasi Solusi", "slug": "evaluasi-model-dan-interpretasi-solusi", "order": 3, "patterns": ["Pemeriksaan Kewajaran Solusi terhadap Konteks", "Analisis Asumsi dan Keterbatasan Model", "Pemilihan Model Terbaik dari Beberapa Alternatif"]}
+    ]
+  },
+  {
+    "subtest": "PEMAHAMAN_BACAAN_MENULIS",
+    "title": "Ejaan dan Tanda Baca",
+    "slug": "ejaan-dan-tanda-baca",
+    "order": 1,
+    "subtopics": [
+      {"title": "Penggunaan Huruf Kapital dan Huruf Miring", "slug": "penggunaan-huruf-kapital-dan-huruf-miring", "order": 1, "patterns": ["Penentuan Penulisan Huruf Kapital pada Nama, Jabatan, dan Judul", "Penggunaan Huruf Miring pada Istilah Asing dan Judul Buku", "Identifikasi Kesalahan Ejaan dalam Kalimat/Paragraf"]},
+      {"title": "Penulisan Kata dan Unsur Serapan", "slug": "penulisan-kata-dan-unsur-serapan", "order": 2, "patterns": ["Kata Depan di/ke/dari vs Imbuhan", "Penulisan Gabungan Kata, Partikel, Singkatan, dan Angka", "Kata Baku vs Tidak Baku", "Penulisan Kata Serapan Sesuai Kaidah"]},
+      {"title": "Tanda Baca", "slug": "tanda-baca", "order": 3, "patterns": ["Penggunaan Tanda Koma pada Rincian, Anak Kalimat, dan Keterangan", "Titik, Titik Dua, dan Titik Koma", "Tanda Hubung, Tanda Pisah, dan Tanda Petik", "Perbaikan Tanda Baca pada Kalimat Rumpang"]}
+    ]
+  },
+  {
+    "subtest": "PEMAHAMAN_BACAAN_MENULIS",
+    "title": "Morfologi dan Pilihan Kata Formal",
+    "slug": "morfologi-dan-pilihan-kata-formal",
+    "order": 2,
+    "subtopics": [
+      {"title": "Afiksasi dan Pembentukan Kata", "slug": "afiksasi-dan-pembentukan-kata", "order": 1, "patterns": ["Peluluhan dan Pembentukan Kata Berimbuhan yang Tepat", "Identifikasi Kesalahan Afiks (me-, ber-, di-, ter-, -kan, -i)", "Perubahan Kelas Kata melalui Imbuhan"]},
+      {"title": "Reduplikasi dan Komposisi Kata", "slug": "reduplikasi-dan-komposisi-kata", "order": 2, "patterns": ["Bentuk dan Makna Kata Ulang yang Benar", "Kata Majemuk vs Frasa"]},
+      {"title": "Diksi Formal dan Ketepatan Kata", "slug": "diksi-formal-dan-ketepatan-kata", "order": 3, "patterns": ["Pemilihan Kata Baku yang Tepat dalam Kalimat", "Penghilangan Kata Mubazir dan Pleonasme", "Ketepatan Kata Berpasangan (Idiomatis Preposisi)"]}
+    ]
+  },
+  {
+    "subtest": "PEMAHAMAN_BACAAN_MENULIS",
+    "title": "Sintaksis dan Tata Kalimat",
+    "slug": "sintaksis-dan-tata-kalimat",
+    "order": 3,
+    "subtopics": [
+      {"title": "Struktur Kalimat dan Unsur Wajib", "slug": "struktur-kalimat-dan-unsur-wajib", "order": 1, "patterns": ["Identifikasi Subjek, Predikat, Objek, Pelengkap, Keterangan", "Perbaikan Kalimat Tidak Bersubjek/Berpredikat", "Kalimat Tunggal vs Majemuk"]},
+      {"title": "Kalimat Efektif", "slug": "kalimat-efektif", "order": 2, "patterns": ["Kehematan Kata", "Kesejajaran (Paralelisme) Bentuk", "Kelogisan dan Ketepatan Makna Kalimat", "Perbaikan Kalimat Tidak Efektif"]},
+      {"title": "Kalimat Majemuk, Klausa, dan Frasa", "slug": "kalimat-majemuk-klausa-dan-frasa", "order": 3, "patterns": ["Kalimat Majemuk Setara vs Bertingkat", "Identifikasi Anak Kalimat dan Induk Kalimat", "Penggabungan Dua Kalimat Menjadi Satu yang Tepat"]},
+      {"title": "Kalimat Aktif-Pasif dan Transformasi Kalimat", "slug": "kalimat-aktif-pasif-dan-transformasi-kalimat", "order": 4, "patterns": ["Perubahan Bentuk Aktif-Pasif", "Pasif Orang Pertama/Kedua (Kuhapus, Kaubaca)", "Perubahan Struktur Kalimat tanpa Mengubah Makna"]}
+    ]
+  },
+  {
+    "subtest": "PEMAHAMAN_BACAAN_MENULIS",
+    "title": "Konjungsi dan Kohesi",
+    "slug": "konjungsi-dan-kohesi",
+    "order": 4,
+    "subtopics": [
+      {"title": "Konjungsi Intrakalimat dan Antarkalimat", "slug": "konjungsi-intrakalimat-dan-antarkalimat", "order": 1, "patterns": ["Pemilihan Konjungsi yang Tepat (Sebab, Akibat, Syarat, Pertentangan)", "Konjungsi Korelatif dan Pasangan Konjungsi", "Kesalahan Penggunaan Konjungsi di Awal Kalimat"]},
+      {"title": "Transisi dan Hubungan Antarkalimat", "slug": "transisi-dan-hubungan-antarkalimat", "order": 2, "patterns": ["Pemilihan Kata Transisi Antarkalimat", "Penentuan Hubungan Logis Antarkalimat dalam Paragraf"]},
+      {"title": "Kohesi Gramatikal dan Leksikal", "slug": "kohesi-gramatikal-dan-leksikal", "order": 3, "patterns": ["Pengacuan (Pronomina) yang Tepat", "Substitusi, Elipsis, dan Repetisi", "Kesalahan Acuan Ambigu"]}
+    ]
+  },
+  {
+    "subtest": "PEMAHAMAN_BACAAN_MENULIS",
+    "title": "Kepaduan Paragraf",
+    "slug": "kepaduan-paragraf",
+    "order": 5,
+    "subtopics": [
+      {"title": "Struktur Paragraf dan Ide Pokok", "slug": "struktur-paragraf-dan-ide-pokok", "order": 1, "patterns": ["Penentuan Kalimat Utama dan Kalimat Penjelas", "Pola Paragraf Deduktif, Induktif, dan Campuran", "Kesatuan dan Pengembangan Paragraf"]},
+      {"title": "Kalimat Rumpang dan Penyisipan Kalimat", "slug": "kalimat-rumpang-dan-penyisipan-kalimat", "order": 2, "patterns": ["Melengkapi Kalimat Rumpang dalam Paragraf", "Penentuan Posisi Penyisipan Kalimat", "Kalimat Penutup dan Simpulan Paragraf yang Padu"]},
+      {"title": "Penyusunan Kalimat Acak dan Kalimat Tidak Padu", "slug": "penyusunan-kalimat-acak-dan-kalimat-tidak-padu", "order": 3, "patterns": ["Menyusun Kalimat Acak Menjadi Paragraf Padu", "Menghapus Kalimat yang Tidak Relevan", "Penentuan Kalimat Pembuka/Penutup yang Logis"]}
+    ]
+  },
+  {
+    "subtest": "PEMAHAMAN_BACAAN_MENULIS",
+    "title": "Penyuntingan dan Penulisan Teks Formal",
+    "slug": "penyuntingan-dan-penulisan-teks-formal",
+    "order": 6,
+    "subtopics": [
+      {"title": "Penyuntingan Teks Rumpang Komprehensif", "slug": "penyuntingan-teks-rumpang-komprehensif", "order": 1, "patterns": ["Perbaikan Ejaan, Diksi, dan Kalimat dalam Satu Teks", "Penentuan Bagian Teks yang Perlu Direvisi"]},
+      {"title": "Struktur Karya Ilmiah dan Teks Formal", "slug": "struktur-karya-ilmiah-dan-teks-formal", "order": 2, "patterns": ["Bagian-bagian Karya Ilmiah (Abstrak, Pendahuluan, Metode, Simpulan)", "Judul, Topik, dan Kerangka Karangan", "Kebahasaan Teks Ilmiah (Objektif, Lugas, Baku)"]},
+      {"title": "Kutipan, Daftar Pustaka, dan Surat Resmi", "slug": "kutipan-daftar-pustaka-dan-surat-resmi", "order": 3, "patterns": ["Penulisan Kutipan Langsung dan Tidak Langsung", "Penyusunan Entri Daftar Pustaka", "Bagian dan Bahasa Surat Resmi"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_PEMAHAMAN_UMUM",
+    "title": "Semantik dan Makna Leksikal",
+    "slug": "semantik-dan-makna-leksikal",
+    "order": 1,
+    "subtopics": [
+      {"title": "Makna Kata: Denotasi, Konotasi, dan Makna Kontekstual", "slug": "makna-kata-denotasi-konotasi-dan-makna-kontekstual", "order": 1, "patterns": ["Penentuan Makna Kata/Frasa Berdasarkan Konteks Kalimat", "Perbedaan Makna Denotatif dan Konotatif", "Makna Kata Serapan dan Istilah"]},
+      {"title": "Relasi Makna", "slug": "relasi-makna", "order": 2, "patterns": ["Sinonim dan Antonim dalam Konteks", "Hiponimi, Polisemi, dan Homonim", "Padanan Kata Paling Tepat dalam Kalimat"]},
+      {"title": "Idiom, Peribahasa, dan Ungkapan", "slug": "idiom-peribahasa-dan-ungkapan", "order": 3, "patterns": ["Makna Idiom dan Ungkapan dalam Kalimat", "Kesesuaian Peribahasa dengan Situasi", "Pemilihan Ungkapan yang Tepat Mengganti Frasa"]},
+      {"title": "Majas dan Gaya Bahasa", "slug": "majas-dan-gaya-bahasa", "order": 4, "patterns": ["Identifikasi Jenis Majas dalam Kutipan", "Fungsi Majas dalam Wacana"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_PEMAHAMAN_UMUM",
+    "title": "Penalaran Wacana Mikro",
+    "slug": "penalaran-wacana-mikro",
+    "order": 2,
+    "subtopics": [
+      {"title": "Gagasan Utama dan Rincian Wacana Pendek", "slug": "gagasan-utama-dan-rincian-wacana-pendek", "order": 1, "patterns": ["Penentuan Gagasan Utama Paragraf", "Pembedaan Ide Pokok dan Ide Penjelas", "Judul yang Paling Tepat"]},
+      {"title": "Hubungan Logis Antargagasan", "slug": "hubungan-logis-antargagasan", "order": 2, "patterns": ["Hubungan Sebab-Akibat, Pertentangan, dan Syarat dalam Paragraf", "Hubungan Umum-Khusus dan Contoh-Generalisasi", "Urutan Logis Gagasan"]},
+      {"title": "Fakta, Opini, dan Penilaian", "slug": "fakta-opini-dan-penilaian", "order": 3, "patterns": ["Identifikasi Opini vs Fakta", "Pernyataan yang Dapat Diverifikasi", "Kata Penanda Penilaian Penulis"]},
+      {"title": "Inferensi, Parafrasa, dan Implikasi", "slug": "inferensi-parafrasa-dan-implikasi", "order": 4, "patterns": ["Parafrasa & Inferensi Implisit", "Simpulan yang Dapat Ditarik dari Wacana", "Implikasi dan Pernyataan yang Sejalan/Bertentangan dengan Teks"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_PEMAHAMAN_UMUM",
+    "title": "Kelogisan Penalaran Bacaan",
+    "slug": "kelogisan-penalaran-bacaan",
+    "order": 3,
+    "subtopics": [
+      {"title": "Evaluasi Argumen dalam Wacana", "slug": "evaluasi-argumen-dalam-wacana", "order": 1, "patterns": ["Penilaian Kekuatan dan Relevansi Argumen", "Identifikasi Asumsi Penulis", "Pernyataan yang Memperkuat/Memperlemah Pendapat dalam Teks"]},
+      {"title": "Kesesatan Penalaran dalam Wacana", "slug": "kesesatan-penalaran-dalam-wacana", "order": 2, "patterns": ["Identifikasi Generalisasi Berlebihan dan Pengabaian Alternatif", "Kontradiksi dan Inkonsistensi dalam Teks", "Penalaran Melingkar dan Premis Tak Teruji"]},
+      {"title": "Kritik Isi dan Sikap Penulis", "slug": "kritik-isi-dan-sikap-penulis", "order": 3, "patterns": ["Penentuan Sikap/Nada Penulis", "Tanggapan Kritis terhadap Isi Wacana", "Relevansi Informasi Tambahan terhadap Teks"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_PEMAHAMAN_UMUM",
+    "title": "Pemahaman Wacana Pengetahuan Umum",
+    "slug": "pemahaman-wacana-pengetahuan-umum",
+    "order": 4,
+    "subtopics": [
+      {"title": "Wacana Sains dan Teknologi", "slug": "wacana-sains-dan-teknologi", "order": 1, "patterns": ["Pemahaman Proses dan Fenomena Ilmiah dalam Teks", "Penarikan Kesimpulan dari Hasil Penelitian Populer", "Istilah Teknis dalam Konteks"]},
+      {"title": "Wacana Sosial, Ekonomi, dan Politik", "slug": "wacana-sosial-ekonomi-dan-politik", "order": 2, "patterns": ["Analisis Isu Kebijakan dan Dampaknya", "Pemahaman Konsep Sosial-Ekonomi dalam Teks", "Perbandingan Sudut Pandang"]},
+      {"title": "Wacana Budaya, Sejarah, dan Humaniora", "slug": "wacana-budaya-sejarah-dan-humaniora", "order": 3, "patterns": ["Pemahaman Narasi Sejarah dan Perubahan Sosial", "Nilai Budaya dan Kearifan Lokal dalam Teks", "Pemaknaan Karya Seni/Budaya"]},
+      {"title": "Wacana Lingkungan dan Isu Kontemporer", "slug": "wacana-lingkungan-dan-isu-kontemporer", "order": 4, "patterns": ["Hubungan Sebab-Akibat pada Isu Lingkungan", "Data/Infografis Pendukung Wacana", "Solusi dan Implikasi Isu Terkini"]}
+    ]
+  },
+  {
+    "subtest": "PENGETAHUAN_PEMAHAMAN_UMUM",
+    "title": "Struktur dan Tujuan Wacana",
+    "slug": "struktur-dan-tujuan-wacana",
+    "order": 5,
+    "subtopics": [
+      {"title": "Jenis Wacana dan Tujuan Penulis", "slug": "jenis-wacana-dan-tujuan-penulis", "order": 1, "patterns": ["Identifikasi Wacana Eksposisi, Argumentasi, Deskripsi, Narasi, Persuasi", "Penentuan Tujuan Komunikatif Penulis"]},
+      {"title": "Fungsi Paragraf dan Organisasi Teks", "slug": "fungsi-paragraf-dan-organisasi-teks", "order": 2, "patterns": ["Peran Paragraf dalam Keseluruhan Teks", "Pola Pengembangan (Kronologis, Kausal, Perbandingan, Masalah-Solusi)"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INDONESIA",
+    "title": "Pemahaman Teks Informatif",
+    "slug": "pemahaman-teks-informatif",
+    "order": 1,
+    "subtopics": [
+      {"title": "Informasi Eksplisit dan Rincian Teks", "slug": "informasi-eksplisit-dan-rincian-teks", "order": 1, "patterns": ["Penentuan Informasi yang Tersurat", "Pencocokan Pernyataan dengan Isi Teks", "Penelusuran Detail Spesifik (Angka, Nama, Waktu)"]},
+      {"title": "Gagasan Pokok dan Struktur Isi", "slug": "gagasan-pokok-dan-struktur-isi", "order": 2, "patterns": ["Penentuan Gagasan Utama Seluruh Teks", "Hubungan Antarparagraf", "Judul dan Ringkasan yang Tepat"]},
+      {"title": "Inferensi dan Simpulan Implisit", "slug": "inferensi-dan-simpulan-implisit", "order": 3, "patterns": ["Parafrasa & Inferensi Implisit", "Simpulan yang Didukung Teks", "Prediksi Kelanjutan/Implikasi Informasi"]},
+      {"title": "Makna Kata dan Ungkapan dalam Teks", "slug": "makna-kata-dan-ungkapan-dalam-teks", "order": 4, "patterns": ["Makna Kontekstual Kata/Frasa", "Rujukan Pronomina dan Penanda Wacana"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INDONESIA",
+    "title": "Teks Argumentatif dan Persuasif",
+    "slug": "teks-argumentatif-dan-persuasif",
+    "order": 2,
+    "subtopics": [
+      {"title": "Tesis, Argumen, dan Bukti", "slug": "tesis-argumen-dan-bukti", "order": 1, "patterns": ["Identifikasi Tesis dan Argumen Pendukung", "Jenis Bukti (Data, Contoh, Kutipan Ahli)", "Penegasan Ulang dan Rekomendasi Penulis"]},
+      {"title": "Fakta, Opini, dan Penilaian Penulis", "slug": "fakta-opini-dan-penilaian-penulis", "order": 2, "patterns": ["Identifikasi Opini vs Fakta", "Penanda Subjektivitas Penulis"]},
+      {"title": "Sudut Pandang, Sikap, dan Tujuan Penulis", "slug": "sudut-pandang-sikap-dan-tujuan-penulis", "order": 3, "patterns": ["Penentuan Sikap Penulis terhadap Isu", "Strategi Persuasi (Ajakan, Emosi, Otoritas)", "Tujuan Komunikatif Teks"]},
+      {"title": "Evaluasi dan Perbandingan Argumen", "slug": "evaluasi-dan-perbandingan-argumen", "order": 4, "patterns": ["Penilaian Kekuatan dan Kelemahan Argumen", "Perbandingan Dua Teks dengan Pandangan Berbeda", "Penentuan Pernyataan yang Mendukung/Menyanggah Teks"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INDONESIA",
+    "title": "Teks Sastra",
+    "slug": "teks-sastra",
+    "order": 3,
+    "subtopics": [
+      {"title": "Prosa Fiksi (Cerpen dan Novel)", "slug": "prosa-fiksi-cerpen-dan-novel", "order": 1, "patterns": ["Analisis Tokoh, Penokohan, dan Konflik", "Alur, Latar, dan Sudut Pandang", "Tema, Amanat, dan Nilai Moral"]},
+      {"title": "Puisi", "slug": "puisi", "order": 2, "patterns": ["Penafsiran Makna dan Tema Puisi", "Diksi, Citraan, dan Majas dalam Puisi", "Parafrasa Bait Puisi"]},
+      {"title": "Drama dan Dialog", "slug": "drama-dan-dialog", "order": 3, "patterns": ["Analisis Watak dari Dialog", "Konflik dan Petunjuk Lakuan"]},
+      {"title": "Apresiasi dan Konteks Karya Sastra", "slug": "apresiasi-dan-konteks-karya-sastra", "order": 4, "patterns": ["Hubungan Karya dengan Latar Sosial-Budaya", "Perbandingan Dua Karya/Kutipan Sastra", "Nilai dan Pesan yang Relevan dengan Kehidupan Nyata"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INDONESIA",
+    "title": "Teks Multimodal dan Visual",
+    "slug": "teks-multimodal-dan-visual",
+    "order": 4,
+    "subtopics": [
+      {"title": "Infografis, Tabel, Grafik, dan Diagram", "slug": "infografis-tabel-grafik-dan-diagram", "order": 1, "patterns": ["Analisis Sebab-Akibat Berdasarkan Data Infografis", "Penarikan Simpulan dari Data Visual", "Keterkaitan Teks dan Visual"]},
+      {"title": "Berita, Iklan, Poster, dan Teks Digital", "slug": "berita-iklan-poster-dan-teks-digital", "order": 2, "patterns": ["Identifikasi Tujuan dan Sasaran Pesan", "Analisis Bahasa Iklan dan Slogan", "Kredibilitas Informasi dan Indikasi Hoaks"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INDONESIA",
+    "title": "Literasi Kritis dan Kebahasaan Teks",
+    "slug": "literasi-kritis-dan-kebahasaan-teks",
+    "order": 5,
+    "subtopics": [
+      {"title": "Struktur dan Kebahasaan Jenis Teks", "slug": "struktur-dan-kebahasaan-jenis-teks", "order": 1, "patterns": ["Ciri Struktur Teks (Laporan, Editorial, Resensi, Biografi, Berita)", "Ciri Kebahasaan Tiap Jenis Teks", "Ketepatan Struktur Teks"]},
+      {"title": "Evaluasi Isi, Bentuk, dan Kebahasaan", "slug": "evaluasi-isi-bentuk-dan-kebahasaan", "order": 2, "patterns": ["Penilaian Kelengkapan dan Ketepatan Isi", "Kesesuaian Pilihan Bahasa dengan Tujuan dan Audiens"]},
+      {"title": "Penerapan dan Refleksi Isi Teks pada Konteks Nyata", "slug": "penerapan-dan-refleksi-isi-teks-pada-konteks-nyata", "order": 3, "patterns": ["Menghubungkan Isi Teks dengan Situasi Kehidupan", "Pengambilan Keputusan Berdasarkan Informasi Teks", "Literasi Budaya dan Kewargaan dalam Teks"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INGGRIS",
+    "title": "Literal and Interpretive Reading",
+    "slug": "literal-and-interpretive-reading",
+    "order": 1,
+    "subtopics": [
+      {"title": "Main Idea and Primary Purpose", "slug": "main-idea-and-primary-purpose", "order": 1, "patterns": ["Identifying the Main Idea of a Passage/Paragraph", "Determining the Primary Purpose of the Text", "Best Title and Summary Selection"]},
+      {"title": "Supporting Details and Specific Information", "slug": "supporting-details-and-specific-information", "order": 2, "patterns": ["Locating Explicit Information", "True/Not True Statements Based on the Text", "Distinguishing Major vs Minor Details"]},
+      {"title": "Inference and Implication", "slug": "inference-and-implication", "order": 3, "patterns": ["Drawing Logical Inferences from Stated Information", "Identifying Implied Meaning and Unstated Assumptions", "Predicting What Follows the Passage"]},
+      {"title": "Vocabulary in Context", "slug": "vocabulary-in-context", "order": 4, "patterns": ["Determining Word/Phrase Meaning from Context", "Idiomatic and Figurative Expressions", "Synonym and Antonym Selection in Context"]},
+      {"title": "Reference and Cohesion", "slug": "reference-and-cohesion", "order": 5, "patterns": ["Pronoun and Referent Identification", "Transition Words and Logical Connectors", "Sentence Insertion and Paragraph Coherence"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INGGRIS",
+    "title": "Text Types and Genres",
+    "slug": "text-types-and-genres",
+    "order": 2,
+    "subtopics": [
+      {"title": "Scientific and Academic Expository Texts", "slug": "scientific-and-academic-expository-texts", "order": 1, "patterns": ["Understanding Processes and Explanations", "Interpreting Research Findings", "Technical Terms and Definitions in Context"]},
+      {"title": "Argumentative and Opinion Texts", "slug": "argumentative-and-opinion-texts", "order": 2, "patterns": ["Identifying Claims, Reasons, and Counterarguments", "Fact vs Opinion", "Author's Stance on an Issue"]},
+      {"title": "Narrative and Literary Texts", "slug": "narrative-and-literary-texts", "order": 3, "patterns": ["Character, Motivation, and Conflict", "Setting, Plot, and Point of View", "Theme and Figurative Language"]},
+      {"title": "Historical, Biographical, and Social Science Texts", "slug": "historical-biographical-and-social-science-texts", "order": 4, "patterns": ["Chronology and Cause-Effect in Historical Accounts", "Understanding Social/Economic Concepts", "Comparing Perspectives within a Text"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INGGRIS",
+    "title": "Critical Reading and Evaluation",
+    "slug": "critical-reading-and-evaluation",
+    "order": 3,
+    "subtopics": [
+      {"title": "Author's Tone, Attitude, and Purpose", "slug": "authors-tone-attitude-and-purpose", "order": 1, "patterns": ["Main Idea & Author's Tone", "Identifying Rhetorical Intent (Inform, Persuade, Criticize)", "Word Choice that Reveals Attitude"]},
+      {"title": "Argument Structure and Evidence", "slug": "argument-structure-and-evidence", "order": 2, "patterns": ["Evaluating the Strength of Evidence", "Strengthening and Weakening the Author's Claim", "Spotting Logical Flaws and Unsupported Assumptions"]},
+      {"title": "Text Organization and Rhetorical Function", "slug": "text-organization-and-rhetorical-function", "order": 3, "patterns": ["Function of a Sentence or Paragraph", "Organizational Patterns (Compare-Contrast, Cause-Effect, Problem-Solution)", "Purpose of Examples, Analogies, and Quotations"]},
+      {"title": "Comparing Multiple Texts", "slug": "comparing-multiple-texts", "order": 4, "patterns": ["Points of Agreement and Disagreement between Two Passages", "Synthesizing Information Across Texts"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INGGRIS",
+    "title": "Visual and Data Literacy",
+    "slug": "visual-and-data-literacy",
+    "order": 4,
+    "subtopics": [
+      {"title": "Reading Infographics, Tables, and Charts", "slug": "reading-infographics-tables-and-charts", "order": 1, "patterns": ["Extracting and Comparing Data Points", "Matching Statements to Data", "Trend Description and Conclusion from Visuals"]},
+      {"title": "Functional and Public Texts", "slug": "functional-and-public-texts", "order": 2, "patterns": ["Notices, Announcements, and Advertisements", "Emails, Memos, and Short Messages", "Schedules, Instructions, and Product Information"]}
+    ]
+  },
+  {
+    "subtest": "LITERASI_INGGRIS",
+    "title": "Sentence-Level Meaning and Language Use in Context",
+    "slug": "sentence-level-meaning-and-language-use-in-context",
+    "order": 5,
+    "subtopics": [
+      {"title": "Paraphrase and Sentence Restatement", "slug": "paraphrase-and-sentence-restatement", "order": 1, "patterns": ["Selecting the Closest Restatement of a Complex Sentence", "Simplifying Dense Academic Sentences", "Summarizing a Paragraph in One Sentence"]},
+      {"title": "Grammar in Context", "slug": "grammar-in-context", "order": 2, "patterns": ["Tenses and Time Consistency", "Subject-Verb Agreement, Passive Voice, and Modals", "Conditionals, Relative Clauses, and Reduced Clauses", "Parallel Structure and Sentence Correction"]},
+      {"title": "Vocabulary, Word Forms, and Collocations", "slug": "vocabulary-word-forms-and-collocations", "order": 3, "patterns": ["Word Form (Noun/Verb/Adjective/Adverb) Selection", "Collocations and Phrasal Verbs", "Cloze Passage Completion"]}
+    ]
+  }
+]

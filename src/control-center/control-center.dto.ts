@@ -97,15 +97,18 @@ export class CreateQuestionControlDto {
   @IsString() subtest!: string;
   @IsString() @IsOptional() subtopicId?: string;
   @IsIn(['EASY', 'MEDIUM', 'HARD']) @IsOptional() difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
-  @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER']) @IsOptional() type?: string;
+  @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER', 'PILIHAN_GANDA', 'ISIAN_SINGKAT']) @IsOptional() type?: string;
   @IsIn(['DRAFT', 'FOR_TRYOUT', 'FOR_PRACTICE']) @IsOptional() target?: 'DRAFT' | 'FOR_TRYOUT' | 'FOR_PRACTICE';
   @IsString() @IsOptional() narration?: string;
   @IsString() @MinLength(1) content!: string;
   @IsString() @IsOptional() imageUrl?: string;
   @IsInt() @Min(1) @IsOptional() points?: number;
+  @IsString() @IsOptional() correctAnswer?: string | null;
+  @IsString() @IsOptional() answerFormatGuide?: string | null;
   
   @IsOptional() options?: CreateQuestionOptionDto[];
   @IsOptional() solutionSteps?: CreateSolutionStepDto[];
+  @IsString() @IsOptional() keyFormula?: string;
   @IsString() @IsOptional() quickTrick?: string;
   @IsString() @IsOptional() staticExplanation?: string;
 }
@@ -114,15 +117,18 @@ export class UpdateQuestionControlDto {
   @IsString() @IsOptional() subtest?: string;
   @IsString() @IsOptional() subtopicId?: string | null;
   @IsIn(['EASY', 'MEDIUM', 'HARD']) @IsOptional() difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
-  @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER']) @IsOptional() type?: string;
+  @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER', 'PILIHAN_GANDA', 'ISIAN_SINGKAT']) @IsOptional() type?: string;
   @IsIn(['DRAFT', 'FOR_TRYOUT', 'FOR_PRACTICE']) @IsOptional() target?: 'DRAFT' | 'FOR_TRYOUT' | 'FOR_PRACTICE';
   @IsString() @IsOptional() narration?: string | null;
   @IsString() @IsOptional() content?: string;
   @IsString() @IsOptional() imageUrl?: string | null;
   @IsInt() @Min(1) @IsOptional() points?: number;
+  @IsString() @IsOptional() correctAnswer?: string | null;
+  @IsString() @IsOptional() answerFormatGuide?: string | null;
   
   @IsOptional() options?: CreateQuestionOptionDto[];
   @IsOptional() solutionSteps?: CreateSolutionStepDto[];
+  @IsString() @IsOptional() keyFormula?: string | null;
   @IsString() @IsOptional() quickTrick?: string | null;
   @IsString() @IsOptional() staticExplanation?: string | null;
 }
@@ -136,6 +142,9 @@ export class CreateDiscountControlDto {
   @IsString() @IsOptional() packageId?: string | null;
   @IsString() @IsOptional() badgeText?: string;
   @IsString() @IsOptional() badgeStyle?: string;
+  @IsString() @IsOptional() issuedByUserId?: string | null;
+  @IsString() @IsOptional() issuedByName?: string | null;
+  @IsString() @IsOptional() issuedByEmail?: string | null;
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
@@ -148,30 +157,47 @@ export class UpdateDiscountControlDto {
   @IsString() @IsOptional() packageId?: string | null;
   @IsString() @IsOptional() badgeText?: string;
   @IsString() @IsOptional() badgeStyle?: string;
+  @IsString() @IsOptional() issuedByUserId?: string | null;
+  @IsString() @IsOptional() issuedByName?: string | null;
+  @IsString() @IsOptional() issuedByEmail?: string | null;
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
 export class CreateVoucherControlDto {
   @IsString() @MinLength(2) code!: string;
   @IsInt() @Min(1) @Max(100) discountPercent!: number;
+  @IsInt() @Min(0) @Max(100) @IsOptional() commissionPercent?: number;
   @IsInt() @Min(0) @IsOptional() maxDiscount?: number | null;
   @IsInt() @Min(0) @IsOptional() minPurchase?: number;
   @IsInt() @Min(1) @IsOptional() maxUsage?: number | null;
   @IsDateString() @IsOptional() expiresAt?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsString() @IsOptional() referrerName?: string | null;
+  @IsString() @IsOptional() issuedToUserId?: string | null;
+  @IsString() @IsOptional() issuedToName?: string | null;
+  @IsString() @IsOptional() issuedToEmail?: string | null;
+  @IsString() @IsOptional() issuedByUserId?: string | null;
+  @IsString() @IsOptional() issuedByName?: string | null;
+  @IsString() @IsOptional() issuedByEmail?: string | null;
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
 export class UpdateVoucherControlDto {
   @IsString() @MinLength(2) @IsOptional() code?: string;
   @IsInt() @Min(1) @Max(100) @IsOptional() discountPercent?: number;
+  @IsInt() @Min(0) @Max(100) @IsOptional() commissionPercent?: number;
   @IsInt() @Min(0) @IsOptional() maxDiscount?: number | null;
   @IsInt() @Min(0) @IsOptional() minPurchase?: number;
   @IsInt() @Min(1) @IsOptional() maxUsage?: number | null;
   @IsDateString() @IsOptional() expiresAt?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsString() @IsOptional() referrerName?: string | null;
+  @IsString() @IsOptional() issuedToUserId?: string | null;
+  @IsString() @IsOptional() issuedToName?: string | null;
+  @IsString() @IsOptional() issuedToEmail?: string | null;
+  @IsString() @IsOptional() issuedByUserId?: string | null;
+  @IsString() @IsOptional() issuedByName?: string | null;
+  @IsString() @IsOptional() issuedByEmail?: string | null;
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
@@ -194,6 +220,7 @@ export class CreateSubtopicControlDto {
   @IsString() @MinLength(2) title!: string;
   @IsString() @IsOptional() slug?: string;
   @IsInt() @Min(0) @IsOptional() order?: number;
+  @IsOptional() patterns?: string[];
 }
 
 export class UpdateSubtopicControlDto {
@@ -201,4 +228,5 @@ export class UpdateSubtopicControlDto {
   @IsString() @MinLength(2) @IsOptional() title?: string;
   @IsString() @IsOptional() slug?: string;
   @IsInt() @Min(0) @IsOptional() order?: number;
+  @IsOptional() patterns?: string[];
 }
