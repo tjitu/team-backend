@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateTryoutControlDto, CreateVoucherControlDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutControlDto, UpdateVoucherControlDto } from './control-center.dto';
+import { AssignPracticeQuestionsDto, AssignTryoutQuestionsDto, BulkQuestionStatusDto, CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSandboxPreviewDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateTryoutControlDto, CreateVoucherControlDto, ReviewQuestionControlDto, ReviewTryoutControlDto, UnassignTryoutQuestionsDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSoalAsliPackageDto, UpdateSoalAsliQuestionSolutionDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutControlDto, UpdateTryoutSubtestsDto, UpdateVoucherControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -64,6 +64,56 @@ export class ControlCenterController {
   @Delete('tryouts/:id')
   deleteTryout(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
     return this.controlCenter.deleteTryout(request.user.id, id);
+  }
+
+  @Get('tryouts/:id/questions')
+  getTryoutWorkspace(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.getTryoutWorkspace(request.user.id, id);
+  }
+
+  @Post('tryouts/:id/questions/assign')
+  assignTryoutQuestions(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: AssignTryoutQuestionsDto,
+  ) {
+    return this.controlCenter.assignTryoutQuestions(request.user.id, id, body);
+  }
+
+  @Post('tryouts/:id/questions/unassign')
+  unassignTryoutQuestions(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UnassignTryoutQuestionsDto,
+  ) {
+    return this.controlCenter.unassignTryoutQuestions(request.user.id, id, body);
+  }
+
+  @Delete('tryouts/:id/questions/:questionId')
+  unassignTryoutQuestion(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('questionId') questionId: string,
+  ) {
+    return this.controlCenter.unassignTryoutQuestion(request.user.id, id, questionId);
+  }
+
+  @Post('tryouts/:id/workflow')
+  reviewTryoutWorkflow(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: ReviewTryoutControlDto,
+  ) {
+    return this.controlCenter.reviewTryoutWorkflow(request.user.id, id, body);
+  }
+
+  @Patch('tryouts/:id/subtests')
+  updateTryoutSubtests(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateTryoutSubtestsDto,
+  ) {
+    return this.controlCenter.updateTryoutSubtests(request.user.id, id, body.subtests || []);
   }
 
   @Get('packages')
@@ -234,19 +284,51 @@ export class ControlCenterController {
     return this.controlCenter.deleteSubtopic(request.user.id, id);
   }
 
+  @Get('questions/batches')
+  getQuestionBatches(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.listQuestionBatches(request.user.id);
+  }
+
   @Get('questions')
   getQuestions(
     @Req() request: AuthenticatedRequest,
     @Query('search') search?: string,
     @Query('subtest') subtest?: string,
     @Query('target') target?: string,
+    @Query('status') status?: string,
+    @Query('batch') batch?: string,
+    @Query('includeArsip') includeArsip?: string,
   ) {
-    return this.controlCenter.listQuestions(request.user.id, search, subtest, target);
+    return this.controlCenter.listQuestions(
+      request.user.id,
+      search,
+      subtest,
+      target,
+      status,
+      includeArsip === 'true' || includeArsip === '1',
+      batch,
+    );
   }
 
   @Post('questions')
   createQuestion(@Req() request: AuthenticatedRequest, @Body() body: CreateQuestionControlDto) {
     return this.controlCenter.createQuestion(request.user.id, body);
+  }
+
+  @Post('questions/bulk-status')
+  bulkUpdateQuestionStatus(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: BulkQuestionStatusDto,
+  ) {
+    return this.controlCenter.bulkUpdateQuestionStatus(request.user.id, body);
+  }
+
+  @Post('sandbox-preview')
+  createSandboxPreview(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CreateSandboxPreviewDto,
+  ) {
+    return this.controlCenter.createSandboxPreviewSession(request.user.id, body.questionId, body.tryoutId);
   }
 
   @Patch('questions/:id')
@@ -258,8 +340,65 @@ export class ControlCenterController {
     return this.controlCenter.updateQuestion(request.user.id, id, body);
   }
 
+  @Post('questions/:id/workflow')
+  reviewQuestionWorkflow(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: ReviewQuestionControlDto,
+  ) {
+    return this.controlCenter.reviewQuestionWorkflow(request.user.id, id, body);
+  }
+
   @Delete('questions/:id')
   deleteQuestion(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
     return this.controlCenter.deleteQuestion(request.user.id, id);
+  }
+
+  @Get('practice')
+  getPracticeWorkspace(@Req() request: AuthenticatedRequest) {
+    return this.controlCenter.getPracticeWorkspace(request.user.id);
+  }
+
+  @Post('practice/assign')
+  assignPracticeQuestions(@Req() request: AuthenticatedRequest, @Body() body: AssignPracticeQuestionsDto) {
+    return this.controlCenter.assignPracticeQuestions(request.user.id, body.questionIds);
+  }
+
+  @Delete('practice/assign/:questionId')
+  unassignPracticeQuestion(@Req() request: AuthenticatedRequest, @Param('questionId') questionId: string) {
+    return this.controlCenter.unassignPracticeQuestion(request.user.id, questionId);
+  }
+
+  @Get('soal-asli/packages')
+  getSoalAsliPackages(
+    @Req() request: AuthenticatedRequest,
+    @Query('year') year?: string,
+    @Query('subtest') subtest?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.controlCenter.listSoalAsliPackages(request.user.id, year, subtest, search);
+  }
+
+  @Get('soal-asli/packages/:id')
+  getSoalAsliPackageDetail(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.getSoalAsliPackageDetail(request.user.id, id);
+  }
+
+  @Patch('soal-asli/packages/:id')
+  updateSoalAsliPackage(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateSoalAsliPackageDto,
+  ) {
+    return this.controlCenter.updateSoalAsliPackage(request.user.id, id, body);
+  }
+
+  @Patch('soal-asli/questions/:id/solution')
+  updateSoalAsliQuestionSolution(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateSoalAsliQuestionSolutionDto,
+  ) {
+    return this.controlCenter.updateSoalAsliQuestionSolution(request.user.id, id, body);
   }
 }

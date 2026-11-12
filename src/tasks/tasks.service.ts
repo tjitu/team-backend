@@ -19,6 +19,7 @@ type ProjectAccess = {
   member: Awaited<ReturnType<TeamAccessService['getActiveMember']>>;
   projectRole: ProjectRole | null;
   isAdmin: boolean;
+  departmentId: string;
 };
 
 @Injectable()
@@ -80,6 +81,7 @@ export class TasksService {
         projectId: null,
         archivedAt: null,
         ...this.standaloneVisibilityWhere(access.member.id, access.isAdmin),
+        ...(query.departmentId?.trim() ? { departmentId: query.departmentId.trim() } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.priority ? { priority: query.priority } : {}),
         ...(query.assigneeId ? { assignees: { some: { teamMemberId: query.assigneeId } } } : {}),
@@ -139,11 +141,36 @@ export class TasksService {
     const title = input.title.trim();
     if (title.length < 2) throw new BadRequestException('Task title is required.');
     const assignedMemberIds = input.assignedMemberIds ?? [];
+    const departmentId = input.departmentId?.trim() || null;
+    const partnershipId = input.partnershipId?.trim() || null;
     return this.prisma.$transaction(async (tx) => {
+      if (departmentId) {
+        const department = await tx.department.findFirst({
+          where: { id: departmentId, isActive: true },
+          select: { id: true },
+        });
+        if (!department) throw new BadRequestException('Target department is not active or does not exist.');
+        if (!access.isAdmin) {
+          const membership = await tx.teamMemberDepartment.findFirst({
+            where: { departmentId, teamMemberId: access.member.id, isActive: true },
+            select: { id: true },
+          });
+          if (!membership) throw new ForbiddenException('You must belong to this department workspace to create tasks in it.');
+        }
+      }
+      if (partnershipId) {
+        const partnership = await tx.marketingPartnership.findFirst({
+          where: { id: partnershipId, archivedAt: null },
+          select: { id: true },
+        });
+        if (!partnership) throw new BadRequestException('Linked partnership row was not found.');
+      }
       await this.assertWorkspaceAssignees(tx, assignedMemberIds);
       const task = await tx.teamTask.create({
         data: {
           projectId: null,
+          departmentId,
+          partnershipId,
           title,
           description: input.description?.trim() || null,
           attachments: input.attachments ?? [],
@@ -165,7 +192,7 @@ export class TasksService {
           eventType: 'STANDALONE_TASK_CREATED',
           entityType: 'TASK',
           entityId: task.id,
-          metadata: { title: task.title, assigneeIds: assignedMemberIds },
+          metadata: { title: task.title, assigneeIds: assignedMemberIds, ...(departmentId ? { departmentId } : {}), ...(partnershipId ? { partnershipId } : {}) },
         },
       });
       return task;
@@ -298,12 +325,22 @@ export class TasksService {
     const title = input.title.trim();
     if (title.length < 2) throw new BadRequestException('Task title is required.');
     const assignedMemberIds = input.assignedMemberIds ?? [];
+    const partnershipId = input.partnershipId?.trim() || null;
 
     return this.prisma.$transaction(async (tx) => {
+      if (partnershipId) {
+        const partnership = await tx.marketingPartnership.findFirst({
+          where: { id: partnershipId, projectId, archivedAt: null },
+          select: { id: true },
+        });
+        if (!partnership) throw new BadRequestException('Linked partnership row was not found in this project.');
+      }
       await this.assertProjectAssignees(tx, projectId, assignedMemberIds);
       const task = await tx.teamTask.create({
         data: {
           projectId,
+          departmentId: access.departmentId,
+          partnershipId,
           title,
           description: input.description?.trim() || null,
           attachments: input.attachments ?? [],
@@ -325,7 +362,7 @@ export class TasksService {
           eventType: 'TASK_CREATED',
           entityType: 'TASK',
           entityId: task.id,
-          metadata: { title: task.title, assigneeIds: assignedMemberIds },
+          metadata: { title: task.title, assigneeIds: assignedMemberIds, ...(partnershipId ? { partnershipId } : {}) },
         },
       });
       return task;
@@ -483,7 +520,7 @@ export class TasksService {
       },
     });
     if (!project) throw new NotFoundException('Project not found.');
-    return { member, isAdmin, projectRole: project.members[0]?.role ?? null };
+    return { member, isAdmin, projectRole: project.members[0]?.role ?? null, departmentId: project.departmentId };
   }
 
   private async getStandaloneAccess(userId: string) {

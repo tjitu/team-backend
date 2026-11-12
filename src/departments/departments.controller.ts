@@ -19,6 +19,14 @@ export class DepartmentsController {
     return this.departments.list(request.user.id);
   }
 
+  @Get('workspace/:slug')
+  getWorkspace(
+    @Req() request: AuthenticatedRequest,
+    @Param('slug') slug: string,
+  ) {
+    return this.departments.getWorkspace(request.user.id, slug);
+  }
+
   @Post()
   create(@Req() request: AuthenticatedRequest, @Body() input: CreateDepartmentDto) {
     return this.departments.create(request.user.id, input);

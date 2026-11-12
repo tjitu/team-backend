@@ -18,6 +18,11 @@ import { TaskPriority, TaskStatus } from '@prisma/client';
 
 export class ListTasksQueryDto {
   @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  departmentId?: string;
+
+  @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
 
@@ -86,6 +91,16 @@ export class CreateTaskDto {
   @IsOptional()
   @IsDateString()
   dueAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  departmentId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  partnershipId?: string;
 
   @IsOptional()
   @IsArray()

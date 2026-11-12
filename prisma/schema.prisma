@@ -44,6 +44,15 @@ enum InvitationStatus {
   REVOKED
 }
 
+enum BroadcastStatus {
+  NOT_STARTED
+  CONTACTED
+  NEGOTIATING
+  AWAITING_RESPONSE
+  PUBLISHED
+  DECLINED
+}
+
 model TeamMember {
   id        String   @id @default(cuid())
   userId    String   @unique @map("user_id")
@@ -63,6 +72,8 @@ model TeamMember {
   invitationsCreated TeamInvitation[] @relation("InvitationCreator")
   departments TeamMemberDepartment[]
   departmentAssignmentsMade TeamMemberDepartment[] @relation("DepartmentAssigner")
+  createdMarketingPartnerships MarketingPartnership[] @relation("MarketingPartnershipCreator")
+  updatedMarketingPartnerships MarketingPartnership[] @relation("MarketingPartnershipUpdater")
 
   @@map("team_members")
 }
@@ -73,6 +84,7 @@ model Project {
   slug        String   @unique
   description String?
   departmentId String  @map("department_id")
+  hasPartnershipSheet Boolean @default(false) @map("has_partnership_sheet")
   startsAt    DateTime? @map("starts_at")
   endsAt      DateTime? @map("ends_at")
   createdById String   @map("created_by_id")
@@ -85,6 +97,7 @@ model Project {
   createdBy   TeamMember @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
   department  Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   tasks       TeamTask[]
+  partnerships MarketingPartnership[]
 
   @@index([departmentId, archivedAt, updatedAt])
   @@index([archivedAt, updatedAt])
@@ -130,6 +143,8 @@ model ActivityLog {
 model TeamTask {
   id                    String       @id @default(cuid())
   projectId             String?      @map("project_id")
+  departmentId          String?      @map("department_id")
+  partnershipId         String?      @map("partnership_id")
   title                 String
   description           String?
   attachments           String[]     @default([])
@@ -142,12 +157,16 @@ model TeamTask {
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
   project               Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  department            Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  partnership           MarketingPartnership? @relation(fields: [partnershipId], references: [id], onDelete: SetNull)
   createdBy             TeamMember   @relation("TaskReporter", fields: [createdByTeamMemberId], references: [id], onDelete: Restrict)
   assignees             TaskAssignee[]
   comments              TaskComment[]
 
   @@index([projectId, status, archivedAt, updatedAt])
   @@index([projectId, archivedAt, updatedAt])
+  @@index([departmentId, archivedAt, updatedAt])
+  @@index([partnershipId, archivedAt])
   @@index([createdByTeamMemberId, archivedAt])
   @@map("tasks")
 }
@@ -214,9 +233,47 @@ model Department {
   updatedAt   DateTime               @updatedAt @map("updated_at")
   members     TeamMemberDepartment[]
   projects    Project[]
+  tasks       TeamTask[]
+  marketingPartnerships MarketingPartnership[]
 
   @@index([isActive, name])
   @@map("departments")
+}
+
+model MarketingPartnership {
+  id              String          @id @default(cuid())
+  name            String
+  category        String          @default("Creator")
+  platform        String          @default("X")
+  totalMembers    Int             @default(0) @map("total_members")
+  picName         String?         @map("pic_name")
+  picContact      String?         @map("pic_contact")
+  broadcastStatus BroadcastStatus @default(NOT_STARTED) @map("broadcast_status")
+  followUpDate    DateTime?       @map("follow_up_date")
+  notes           String?
+  projectId       String?         @map("project_id")
+  departmentId    String?         @map("department_id")
+  createdById     String?         @map("created_by_id")
+  updatedById     String?         @map("updated_by_id")
+  sortOrder       Int             @default(0) @map("sort_order")
+  version         Int             @default(1)
+  archivedAt      DateTime?       @map("archived_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  project    Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy  TeamMember? @relation("MarketingPartnershipCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  TeamMember? @relation("MarketingPartnershipUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  tasks      TeamTask[]
+
+  @@index([archivedAt, sortOrder, createdAt])
+  @@index([projectId, archivedAt])
+  @@index([broadcastStatus, archivedAt])
+  @@index([platform, archivedAt])
+  @@index([followUpDate, archivedAt])
+  @@index([departmentId])
+  @@map("marketing_partnerships")
 }
 
 model TeamMemberDepartment {

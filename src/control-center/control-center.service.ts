@@ -280,9 +280,25 @@ export class ControlCenterService {
     return this.jituManagement.deleteSubtopic(id);
   }
 
-  async listQuestions(userId: string, search = '', subtest = '', target = '') {
+  async listQuestionBatches(userId: string) {
     await this.requireAdministrator(userId);
-    return this.jituManagement.listQuestions(search, subtest, target);
+    if (!this.jituManagement.listQuestionBatches) {
+      return [];
+    }
+    return this.jituManagement.listQuestionBatches();
+  }
+
+  async listQuestions(
+    userId: string,
+    search = '',
+    subtest = '',
+    target = '',
+    status = '',
+    includeArsip = false,
+    batch = '',
+  ) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listQuestions(search, subtest, target, status, includeArsip, batch);
   }
 
   async createQuestion(userId: string, input: any) {
@@ -297,11 +313,149 @@ export class ControlCenterService {
     return result;
   }
 
+  async reviewQuestionWorkflow(userId: string, id: string, input: { action: string; revisionNotes?: string; restoreStatus?: string }) {
+    const member = await this.requireAdministrator(userId);
+    const actorLabel = this.getActorLabel(member, userId);
+    const result = await this.jituManagement.reviewQuestionWorkflow(id, input, actorLabel);
+    if (!result) throw new NotFoundException('Question not found.');
+    return result;
+  }
+
+  async bulkUpdateQuestionStatus(
+    userId: string,
+    input: {
+      questionIds: string[];
+      status: 'DRAFT' | 'QC_SANDBOX' | 'NEEDS_REVISION' | 'READY' | 'RETIRED';
+      revisionNotes?: string;
+    },
+  ) {
+    const member = await this.requireAdministrator(userId);
+    const actorLabel = this.getActorLabel(member, userId);
+    return this.jituManagement.bulkUpdateQuestionStatus(input, actorLabel);
+  }
+
+  async createSandboxPreviewSession(userId: string, questionId?: string, tryoutId?: string) {
+    const member = await this.requireAdministrator(userId);
+    const actorLabel = this.getActorLabel(member, userId);
+    if (!this.jituManagement.createSandboxPreviewSession) {
+      throw new NotFoundException('Sandbox preview is unavailable.');
+    }
+    return this.jituManagement.createSandboxPreviewSession(questionId, actorLabel, tryoutId);
+  }
+
   async deleteQuestion(userId: string, id: string) {
     await this.requireAdministrator(userId);
     const result = await this.jituManagement.deleteQuestion(id);
     if (!result) throw new NotFoundException('Question not found.');
     return result;
+  }
+
+  async getPracticeWorkspace(userId: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.getPracticeWorkspace();
+  }
+
+  async assignPracticeQuestions(userId: string, questionIds: string[]) {
+    const member = await this.requireAdministrator(userId);
+    const actorLabel = this.getActorLabel(member, userId);
+    return this.jituManagement.assignPracticeQuestions(questionIds, actorLabel);
+  }
+
+  async unassignPracticeQuestion(userId: string, questionId: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.unassignPracticeQuestion(questionId);
+  }
+
+  async getTryoutWorkspace(userId: string, tryoutId: string) {
+    await this.requireAdministrator(userId);
+    if (!this.jituManagement.getTryoutWorkspace) {
+      throw new NotFoundException('Tryout workspace is unavailable.');
+    }
+    return this.jituManagement.getTryoutWorkspace(tryoutId);
+  }
+
+  async assignTryoutQuestions(userId: string, tryoutId: string, input: { questionIds?: string[]; batch?: string }) {
+    const member = await this.requireAdministrator(userId);
+    const actorLabel = this.getActorLabel(member, userId);
+    if (!this.jituManagement.assignTryoutQuestions) {
+      throw new NotFoundException('Tryout assignment is unavailable.');
+    }
+    return this.jituManagement.assignTryoutQuestions(tryoutId, input, actorLabel);
+  }
+
+  async unassignTryoutQuestions(userId: string, tryoutId: string, input: { questionIds?: string[]; batch?: string }) {
+    await this.requireAdministrator(userId);
+    if (!this.jituManagement.unassignTryoutQuestions) {
+      throw new NotFoundException('Tryout unassignment is unavailable.');
+    }
+    return this.jituManagement.unassignTryoutQuestions(tryoutId, input);
+  }
+
+  async unassignTryoutQuestion(userId: string, tryoutId: string, questionId: string) {
+    await this.requireAdministrator(userId);
+    if (!this.jituManagement.unassignTryoutQuestions) {
+      throw new NotFoundException('Tryout unassignment is unavailable.');
+    }
+    return this.jituManagement.unassignTryoutQuestions(tryoutId, { questionIds: [questionId] });
+  }
+
+  async reviewTryoutWorkflow(
+    userId: string,
+    tryoutId: string,
+    input: { action: string; revisionNotes?: string },
+  ) {
+    const member = await this.requireAdministrator(userId);
+    const actorLabel = this.getActorLabel(member, userId);
+    if (!this.jituManagement.reviewTryoutWorkflow) {
+      throw new NotFoundException('Tryout workflow is unavailable.');
+    }
+    const result = await this.jituManagement.reviewTryoutWorkflow(tryoutId, input, actorLabel);
+    if (!result) throw new NotFoundException('Tryout not found.');
+    return result;
+  }
+
+  async updateTryoutSubtests(
+    userId: string,
+    tryoutId: string,
+    subtests: Array<{ code?: string; id?: string; durationMinutes: number }>,
+  ) {
+    await this.requireAdministrator(userId);
+    if (!this.jituManagement.updateTryoutSubtests) {
+      throw new NotFoundException('Subtest update is unavailable.');
+    }
+    return this.jituManagement.updateTryoutSubtests(tryoutId, subtests);
+  }
+
+  async listSoalAsliPackages(userId: string, year = '', subtest = '', search = '') {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listSoalAsliPackages(year, subtest, search);
+  }
+
+  async getSoalAsliPackageDetail(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.getSoalAsliPackageDetail(id);
+    if (!result) throw new NotFoundException('Arsip Soal package not found.');
+    return result;
+  }
+
+  async updateSoalAsliPackage(userId: string, id: string, input: { isActive?: boolean; title?: string; durationMinutes?: number }) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.updateSoalAsliPackage(id, input);
+    if (!result) throw new NotFoundException('Arsip Soal package not found.');
+    return result;
+  }
+
+  async updateSoalAsliQuestionSolution(userId: string, id: string, input: any) {
+    await this.requireAdministrator(userId);
+    const result = await this.jituManagement.updateSoalAsliQuestionSolution(id, input);
+    if (!result) throw new NotFoundException('Soal arsip tidak ditemukan.');
+    return result;
+  }
+
+  private getActorLabel(member: Record<string, unknown>, fallback: string): string {
+    if (typeof member.name === 'string' && member.name.trim()) return member.name.trim();
+    if (typeof member.email === 'string' && member.email.trim()) return member.email.trim();
+    return fallback;
   }
 
   private async requireAdministrator(userId: string) {

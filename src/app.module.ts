@@ -11,9 +11,10 @@ import { DepartmentsModule } from './departments/departments.module';
 import { ActivityModule } from './activity/activity.module';
 import { AuthModule } from './auth/auth.module';
 import { ControlCenterModule } from './control-center/control-center.module';
+import { MarketingModule } from './marketing/marketing.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule, DepartmentsModule, ActivityModule, ControlCenterModule],
+  imports: [DatabaseModule, AuthModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule, DepartmentsModule, ActivityModule, ControlCenterModule, MarketingModule],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: TrustedOriginGuard }],
 })

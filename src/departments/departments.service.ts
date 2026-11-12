@@ -41,6 +41,9 @@ export class DepartmentsService {
             members: {
               where: { isActive: true, teamMember: { isActive: true } },
             },
+            projects: {
+              where: { archivedAt: null },
+            },
           },
         },
       },
@@ -205,6 +208,103 @@ export class DepartmentsService {
       });
       return { id: updated.id, isActive: updated.isActive };
     });
+  }
+
+  async getWorkspace(userId: string, slugOrId: string) {
+    const member = await this.teamAccess.getActiveMember(userId);
+    const isAdmin = this.isAdmin(member.role);
+    const key = slugOrId.trim();
+    const department = await this.prisma.department.findFirst({
+      where: {
+        OR: [{ slug: key }, { id: key }],
+      },
+      include: {
+        _count: {
+          select: {
+            members: { where: { isActive: true, teamMember: { isActive: true } } },
+            projects: { where: { archivedAt: null } },
+          },
+        },
+      },
+    });
+    if (!department) throw new NotFoundException('Department workspace not found.');
+
+    const memberDept = await this.prisma.teamMemberDepartment.findFirst({
+      where: { departmentId: department.id, teamMemberId: member.id, isActive: true },
+      select: { id: true },
+    });
+
+    const projects = await this.prisma.project.findMany({
+      where: {
+        departmentId: department.id,
+        archivedAt: null,
+        ...(isAdmin ? {} : { members: { some: { teamMemberId: member.id, isActive: true } } }),
+      },
+      include: {
+        department: { select: { id: true, name: true, slug: true, isActive: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        _count: {
+          select: {
+            members: { where: { isActive: true } },
+            tasks: { where: { archivedAt: null } },
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+    });
+
+    const accessibleProjectIds = projects.map((project) => project.id);
+    const standaloneDeptWhere: Prisma.TeamTaskWhereInput = {
+      projectId: null,
+      departmentId: department.id,
+      ...(isAdmin || memberDept
+        ? {}
+        : {
+            OR: [
+              { createdByTeamMemberId: member.id },
+              { assignees: { some: { teamMemberId: member.id } } },
+            ],
+          }),
+    };
+    const taskOrFilters: Prisma.TeamTaskWhereInput[] = [standaloneDeptWhere];
+    if (accessibleProjectIds.length > 0) {
+      taskOrFilters.push({ projectId: { in: accessibleProjectIds } });
+    }
+
+    const tasks = await this.prisma.teamTask.findMany({
+      where: {
+        archivedAt: null,
+        OR: taskOrFilters,
+      },
+      include: {
+        project: { select: { id: true, name: true, hasPartnershipSheet: true } },
+        assignees: {
+          select: { teamMember: { select: { id: true, name: true, email: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
+        createdBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { comments: true } },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      take: 200,
+    });
+
+    const members = await this.prisma.teamMemberDepartment.findMany({
+      where: { departmentId: department.id, isActive: true, teamMember: { isActive: true } },
+      select: {
+        id: true,
+        teamMember: { select: { id: true, name: true, email: true, role: true } },
+      },
+      orderBy: [{ teamMember: { name: 'asc' } }],
+    });
+
+    return {
+      department,
+      isMember: Boolean(memberDept),
+      projects,
+      tasks,
+      members,
+    };
   }
 
   private async requireAdmin(userId: string) {

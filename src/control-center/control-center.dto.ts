@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateTryoutControlDto {
   @IsString() @MinLength(2) title!: string;
@@ -28,6 +28,7 @@ export class UpdateManagedUserDto {
   @IsIn(['USER', 'ADMIN']) @IsOptional() role?: 'USER' | 'ADMIN';
   @IsString() @MinLength(1) @MaxLength(100) @IsOptional() target?: string | null;
   @IsBoolean() @IsOptional() isBanned?: boolean;
+  @IsBoolean() @IsOptional() isSandbox?: boolean;
 }
 
 export class UpdateHiringApplicationDto {
@@ -95,10 +96,18 @@ export class CreateSolutionStepDto {
 
 export class CreateQuestionControlDto {
   @IsString() subtest!: string;
-  @IsString() @IsOptional() subtopicId?: string;
+  @IsString() @IsOptional() topicId?: string | null;
+  @IsString() @IsOptional() subtopicId?: string | null;
+  @IsString() @IsOptional() pattern?: string | null;
+  @IsString() @IsOptional() batch?: string | null;
   @IsIn(['EASY', 'MEDIUM', 'HARD']) @IsOptional() difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
   @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER', 'PILIHAN_GANDA', 'ISIAN_SINGKAT']) @IsOptional() type?: string;
-  @IsIn(['DRAFT', 'FOR_TRYOUT', 'FOR_PRACTICE']) @IsOptional() target?: 'DRAFT' | 'FOR_TRYOUT' | 'FOR_PRACTICE';
+  @IsIn(['DRAFT', 'SANDBOX', 'FOR_TRYOUT', 'FOR_PRACTICE', 'SOAL_ASLI', 'BANK']) @IsOptional() target?: 'DRAFT' | 'SANDBOX' | 'FOR_TRYOUT' | 'FOR_PRACTICE' | 'SOAL_ASLI' | 'BANK';
+  @IsIn(['DRAFT', 'QC_SANDBOX', 'NEEDS_REVISION', 'READY', 'RETIRED']) @IsOptional() status?: 'DRAFT' | 'QC_SANDBOX' | 'NEEDS_REVISION' | 'READY' | 'RETIRED';
+  @IsString() @IsOptional() revisionNotes?: string | null;
+  @IsString() @IsOptional() reviewedBy?: string | null;
+  @IsString() @IsOptional() tryoutId?: string | null;
+  @IsString() @IsOptional() packageId?: string | null;
   @IsString() @IsOptional() narration?: string;
   @IsString() @MinLength(1) content!: string;
   @IsString() @IsOptional() imageUrl?: string;
@@ -115,10 +124,18 @@ export class CreateQuestionControlDto {
 
 export class UpdateQuestionControlDto {
   @IsString() @IsOptional() subtest?: string;
+  @IsString() @IsOptional() topicId?: string | null;
   @IsString() @IsOptional() subtopicId?: string | null;
+  @IsString() @IsOptional() pattern?: string | null;
+  @IsString() @IsOptional() batch?: string | null;
   @IsIn(['EASY', 'MEDIUM', 'HARD']) @IsOptional() difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
   @IsIn(['MULTIPLE_CHOICE', 'COMPLEX_MULTIPLE_CHOICE', 'SHORT_ANSWER', 'PILIHAN_GANDA', 'ISIAN_SINGKAT']) @IsOptional() type?: string;
-  @IsIn(['DRAFT', 'FOR_TRYOUT', 'FOR_PRACTICE']) @IsOptional() target?: 'DRAFT' | 'FOR_TRYOUT' | 'FOR_PRACTICE';
+  @IsIn(['DRAFT', 'SANDBOX', 'FOR_TRYOUT', 'FOR_PRACTICE', 'SOAL_ASLI', 'BANK']) @IsOptional() target?: 'DRAFT' | 'SANDBOX' | 'FOR_TRYOUT' | 'FOR_PRACTICE' | 'SOAL_ASLI' | 'BANK';
+  @IsIn(['DRAFT', 'QC_SANDBOX', 'NEEDS_REVISION', 'READY', 'RETIRED']) @IsOptional() status?: 'DRAFT' | 'QC_SANDBOX' | 'NEEDS_REVISION' | 'READY' | 'RETIRED';
+  @IsString() @IsOptional() revisionNotes?: string | null;
+  @IsString() @IsOptional() reviewedBy?: string | null;
+  @IsString() @IsOptional() tryoutId?: string | null;
+  @IsString() @IsOptional() packageId?: string | null;
   @IsString() @IsOptional() narration?: string | null;
   @IsString() @IsOptional() content?: string;
   @IsString() @IsOptional() imageUrl?: string | null;
@@ -229,4 +246,87 @@ export class UpdateSubtopicControlDto {
   @IsString() @IsOptional() slug?: string;
   @IsInt() @Min(0) @IsOptional() order?: number;
   @IsOptional() patterns?: string[];
+}
+
+export class ReviewQuestionControlDto {
+  @IsIn(['SUBMIT_QC', 'APPROVE', 'REQUEST_REVISION', 'RESUBMIT_QC', 'RETIRE', 'RESTORE'])
+  action!: 'SUBMIT_QC' | 'APPROVE' | 'REQUEST_REVISION' | 'RESUBMIT_QC' | 'RETIRE' | 'RESTORE';
+
+  @IsString() @IsOptional() revisionNotes?: string;
+  @IsIn(['READY', 'NEEDS_REVISION', 'DRAFT']) @IsOptional() restoreStatus?: 'READY' | 'NEEDS_REVISION' | 'DRAFT';
+}
+
+export class BulkQuestionStatusDto {
+  @IsArray()
+  @IsString({ each: true })
+  questionIds!: string[];
+
+  @IsIn(['DRAFT', 'QC_SANDBOX', 'NEEDS_REVISION', 'READY', 'RETIRED'])
+  status!: 'DRAFT' | 'QC_SANDBOX' | 'NEEDS_REVISION' | 'READY' | 'RETIRED';
+
+  @IsString() @IsOptional() revisionNotes?: string;
+}
+
+export class AssignPracticeQuestionsDto {
+  @IsArray()
+  @IsString({ each: true })
+  questionIds!: string[];
+}
+
+export class AssignTryoutQuestionsDto {
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  questionIds?: string[];
+
+  @IsString()
+  @IsOptional()
+  batch?: string;
+}
+
+export class UnassignTryoutQuestionsDto {
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  questionIds?: string[];
+
+  @IsString()
+  @IsOptional()
+  batch?: string;
+}
+
+export class UpdateSoalAsliPackageDto {
+  @IsBoolean() @IsOptional() isActive?: boolean;
+  @IsString() @MinLength(2) @IsOptional() title?: string;
+  @IsInt() @Min(1) @IsOptional() durationMinutes?: number;
+}
+
+export class UpdateSoalAsliQuestionSolutionDto {
+  @IsString() @IsOptional() correctAnswer?: string | null;
+  @IsOptional() options?: CreateQuestionOptionDto[];
+  @IsOptional() solutionSteps?: CreateSolutionStepDto[];
+  @IsString() @IsOptional() keyFormula?: string | null;
+  @IsString() @IsOptional() quickTrick?: string | null;
+  @IsString() @IsOptional() staticExplanation?: string | null;
+}
+
+export class CreateSandboxPreviewDto {
+  @IsString() @IsOptional() questionId?: string;
+  @IsString() @IsOptional() tryoutId?: string;
+}
+
+export class ReviewTryoutControlDto {
+  @IsIn(['SUBMIT_QC', 'APPROVE', 'REQUEST_REVISION', 'RESUBMIT_QC', 'UNPUBLISH'])
+  action!: 'SUBMIT_QC' | 'APPROVE' | 'REQUEST_REVISION' | 'RESUBMIT_QC' | 'UNPUBLISH';
+
+  @IsString() @IsOptional() revisionNotes?: string;
+}
+
+export class UpdateTryoutSubtestsDto {
+  @IsArray()
+  subtests!: Array<{
+    code?: string;
+    id?: string;
+    durationMinutes: number;
+  }>;
 }

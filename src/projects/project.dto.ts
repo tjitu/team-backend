@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { ProjectRole } from '@prisma/client';
 
 export class CreateProjectDto {
@@ -14,6 +14,10 @@ export class CreateProjectDto {
   @IsString()
   @Length(1, 120)
   departmentId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hasPartnershipSheet?: boolean;
 
   @IsOptional()
   @IsDateString()
@@ -39,6 +43,10 @@ export class UpdateProjectDto {
   @IsString()
   @Length(1, 120)
   departmentId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hasPartnershipSheet?: boolean;
 
   @IsOptional()
   @IsDateString()
