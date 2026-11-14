@@ -8,3 +8,10 @@ coverage/
 backups/
 .DS_Store
 vercel-analytics-config.json
+
+
+# scratch & temporary test files
+scratch_*.*
+check_*.*
+*.scratch.*
+temp_*.*
