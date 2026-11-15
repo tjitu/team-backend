@@ -2548,6 +2548,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
         AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
       ORDER BY
+        CASE WHEN pa."question_id" IS NULL THEN 0 ELSE 1 END ASC,
+        CASE WHEN pa."question_id" IS NULL THEN q."createdAt" END DESC NULLS LAST,
+        pa."sort_order" ASC NULLS LAST,
         CASE COALESCE(q."status", 'DRAFT')
           WHEN 'NEEDS_REVISION' THEN 0
           WHEN 'QC_SANDBOX' THEN 1
@@ -2555,7 +2558,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           WHEN 'READY' THEN 3
           ELSE 4
         END ASC,
-        pa."sort_order" ASC NULLS LAST,
         COALESCE(pa."assigned_at", q."createdAt") DESC
     `);
 
