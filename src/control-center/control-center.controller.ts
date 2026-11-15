@@ -113,7 +113,7 @@ export class ControlCenterController {
     @Param('id') id: string,
     @Body() body: UpdateTryoutSubtestsDto,
   ) {
-    return this.controlCenter.updateTryoutSubtests(request.user.id, id, body.subtests || []);
+    return this.controlCenter.updateTryoutSubtests(request.user.id, id, body.subtests || [], body.breakSeconds);
   }
 
   @Get('packages')
@@ -361,7 +361,7 @@ export class ControlCenterController {
 
   @Post('practice/assign')
   assignPracticeQuestions(@Req() request: AuthenticatedRequest, @Body() body: AssignPracticeQuestionsDto) {
-    return this.controlCenter.assignPracticeQuestions(request.user.id, body.questionIds);
+    return this.controlCenter.assignPracticeQuestions(request.user.id, body.questionIds || [], body.batch);
   }
 
   @Delete('practice/assign/:questionId')

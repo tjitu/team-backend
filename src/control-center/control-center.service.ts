@@ -53,7 +53,7 @@ export class ControlCenterService {
     return this.jituManagement.listTryouts();
   }
 
-  async createTryout(userId: string, input: TryoutInput & Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'batch' | 'releaseDate' | 'scheduledStart' | 'scheduledEnd'>>) {
+  async createTryout(userId: string, input: TryoutInput & Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>>) {
     await this.requireAdministrator(userId);
     const start = new Date(input.scheduledStart).getTime();
     const end = new Date(input.scheduledEnd).getTime();
@@ -355,10 +355,10 @@ export class ControlCenterService {
     return this.jituManagement.getPracticeWorkspace();
   }
 
-  async assignPracticeQuestions(userId: string, questionIds: string[]) {
+  async assignPracticeQuestions(userId: string, questionIds: string[], batch?: string) {
     const member = await this.requireAdministrator(userId);
     const actorLabel = this.getActorLabel(member, userId);
-    return this.jituManagement.assignPracticeQuestions(questionIds, actorLabel);
+    return this.jituManagement.assignPracticeQuestions(questionIds, actorLabel, batch);
   }
 
   async unassignPracticeQuestion(userId: string, questionId: string) {
@@ -417,13 +417,14 @@ export class ControlCenterService {
   async updateTryoutSubtests(
     userId: string,
     tryoutId: string,
-    subtests: Array<{ code?: string; id?: string; durationMinutes: number }>,
+    subtests: Array<{ code?: string; id?: string; durationMinutes: number; targetQuestionCount?: number }>,
+    breakSeconds?: number,
   ) {
     await this.requireAdministrator(userId);
     if (!this.jituManagement.updateTryoutSubtests) {
       throw new NotFoundException('Subtest update is unavailable.');
     }
-    return this.jituManagement.updateTryoutSubtests(tryoutId, subtests);
+    return this.jituManagement.updateTryoutSubtests(tryoutId, subtests, breakSeconds);
   }
 
   async listSoalAsliPackages(userId: string, year = '', subtest = '', search = '') {

@@ -7,12 +7,13 @@ export type TryoutInput = {
   title?: string;
   description?: string | null;
   solutionPrice?: number;
-  batch?: 'SNBT' | 'MANDIRI';
+  batch?: 'SNBT' | 'SNBT_2027' | 'MANDIRI';
   releaseDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
   isPublic?: boolean;
   referralCode?: string | null;
+  breakSeconds?: number;
 };
 
 export type PackageInput = {
@@ -120,7 +121,7 @@ export interface JituManagementDataSource {
   getOverview?(): Promise<unknown>;
   invalidateOverview?(): void;
   listTryouts(): Promise<unknown>;
-  createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'batch' | 'releaseDate' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
+  createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
   updateTryout(id: string, input: TryoutInput): Promise<unknown | null>;
   deleteTryout(id: string): Promise<unknown | null>;
   listPackages(): Promise<unknown>;
@@ -164,7 +165,7 @@ export interface JituManagementDataSource {
   ): Promise<{ token: string; questionId: string | null; tryoutId: string | null; expiresAt: string }>;
   deleteQuestion(id: string): Promise<unknown>;
   getPracticeWorkspace(): Promise<unknown>;
-  assignPracticeQuestions(questionIds: string[], actorLabel?: string): Promise<unknown>;
+  assignPracticeQuestions(questionIds: string[], actorLabel?: string, batch?: string): Promise<unknown>;
   unassignPracticeQuestion(questionId: string): Promise<unknown>;
   getTryoutWorkspace?(tryoutId: string): Promise<unknown>;
   reviewTryoutWorkflow?(
@@ -174,7 +175,8 @@ export interface JituManagementDataSource {
   ): Promise<unknown>;
   updateTryoutSubtests?(
     tryoutId: string,
-    subtests: Array<{ code?: string; id?: string; durationMinutes: number }>,
+    subtests: Array<{ code?: string; id?: string; durationMinutes: number; targetQuestionCount?: number }>,
+    breakSeconds?: number,
   ): Promise<unknown>;
   assignTryoutQuestions?(
     tryoutId: string,
@@ -294,11 +296,17 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         ON public."QcSandboxPreviewSession" ("expires_at")
       `);
       await this.database().$executeRawUnsafe(`
+        ALTER TYPE public."TryoutBatch" ADD VALUE IF NOT EXISTS 'SNBT_2027'
+      `).catch(() => undefined);
+      await this.database().$executeRawUnsafe(`
         ALTER TABLE public."TryOut"
           ADD COLUMN IF NOT EXISTS "curation_status" TEXT,
           ADD COLUMN IF NOT EXISTS "revision_notes" TEXT,
           ADD COLUMN IF NOT EXISTS "reviewed_by" TEXT,
-          ADD COLUMN IF NOT EXISTS "reviewed_at" TIMESTAMPTZ
+          ADD COLUMN IF NOT EXISTS "reviewed_at" TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS "break_seconds" INTEGER NOT NULL DEFAULT 60,
+          ADD COLUMN IF NOT EXISTS "questions_released" BOOLEAN,
+          ADD COLUMN IF NOT EXISTS "questions_released_at" TIMESTAMPTZ
       `);
       await this.database().$executeRawUnsafe(`
         UPDATE public."TryOut"
@@ -306,10 +314,112 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         WHERE "curation_status" IS NULL
       `);
       await this.database().$executeRawUnsafe(`
+        UPDATE public."TryOut"
+        SET
+          "questions_released" = (COALESCE("curation_status", 'DRAFT') = 'PUBLISHED'),
+          "questions_released_at" = CASE
+            WHEN COALESCE("curation_status", 'DRAFT') = 'PUBLISHED'
+            THEN COALESCE("reviewed_at", "releaseDate", CURRENT_TIMESTAMP)
+            ELSE NULL
+          END
+        WHERE "questions_released" IS NULL
+      `);
+      await this.database().$executeRawUnsafe(`
+        UPDATE public."TryOut" t
+        SET
+          "questions_released" = false,
+          "questions_released_at" = NULL
+        WHERE t."questions_released" = true
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM public."Question" q
+              LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
+              WHERE COALESCE(q."tryoutId", sub."try_out_id") = t."id"
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM public."Question" q
+              LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
+              WHERE COALESCE(q."tryoutId", sub."try_out_id") = t."id"
+                AND COALESCE(q."status", 'DRAFT') <> 'READY'
+            )
+          )
+      `);
+      await this.database().$executeRawUnsafe(`
         ALTER TABLE public."TryOut"
           ALTER COLUMN "curation_status" SET DEFAULT 'DRAFT',
-          ALTER COLUMN "curation_status" SET NOT NULL
+          ALTER COLUMN "curation_status" SET NOT NULL,
+          ALTER COLUMN "questions_released" SET DEFAULT false,
+          ALTER COLUMN "questions_released" SET NOT NULL
       `);
+      await this.database().$executeRawUnsafe(`
+        ALTER TABLE public."Subtest"
+          ADD COLUMN IF NOT EXISTS "target_question_count" INTEGER
+      `);
+      await this.database().$executeRawUnsafe(`
+        UPDATE public."Subtest"
+        SET "target_question_count" = CASE "name"::text
+          WHEN 'PU' THEN 30
+          WHEN 'PPU' THEN 20
+          WHEN 'PBM' THEN 20
+          WHEN 'PK' THEN 20
+          WHEN 'LBI' THEN 30
+          WHEN 'LBE' THEN 20
+          WHEN 'PM' THEN 20
+          ELSE 20
+        END
+        WHERE "target_question_count" IS NULL OR "target_question_count" <= 0
+      `);
+      await this.database().$executeRawUnsafe(`
+        ALTER TABLE public."Subtest"
+          ALTER COLUMN "target_question_count" SET DEFAULT 20,
+          ALTER COLUMN "target_question_count" SET NOT NULL
+      `);
+      // Deduplicate any duplicate Subtest rows per (try_out_id, name) that caused inflated totalDurationMinutes (e.g. 386m)
+      await this.database().$executeRawUnsafe(`
+        WITH ranked AS (
+          SELECT
+            s."id",
+            FIRST_VALUE(s."id") OVER (
+              PARTITION BY s."try_out_id", s."name"
+              ORDER BY
+                (SELECT COUNT(*) FROM public."Question" q WHERE q."subtest_id" = s."id") DESC,
+                s."id" ASC
+            ) AS "canonical_id",
+            ROW_NUMBER() OVER (
+              PARTITION BY s."try_out_id", s."name"
+              ORDER BY
+                (SELECT COUNT(*) FROM public."Question" q WHERE q."subtest_id" = s."id") DESC,
+                s."id" ASC
+            ) AS "rn"
+          FROM public."Subtest" s
+        )
+        UPDATE public."Question" q
+        SET "subtest_id" = r."canonical_id"
+        FROM ranked r
+        WHERE q."subtest_id" = r."id" AND r."rn" > 1
+      `);
+      await this.database().$executeRawUnsafe(`
+        WITH ranked AS (
+          SELECT
+            s."id",
+            ROW_NUMBER() OVER (
+              PARTITION BY s."try_out_id", s."name"
+              ORDER BY
+                (SELECT COUNT(*) FROM public."Question" q WHERE q."subtest_id" = s."id") DESC,
+                s."id" ASC
+            ) AS "rn"
+          FROM public."Subtest" s
+        )
+        DELETE FROM public."Subtest" s
+        USING ranked r
+        WHERE s."id" = r."id" AND r."rn" > 1
+      `);
+      await this.database().$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_subtest_tryout_name_unique"
+        ON public."Subtest" ("try_out_id", "name")
+      `).catch(() => undefined);
       this.lifecycleSchemaReady = true;
     })().finally(() => {
       this.lifecycleSchemaPromise = null;
@@ -814,13 +924,21 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         t."id", t."code", t."title", t."description", t."solutionPrice", t."batch"::text AS "batch",
         t."releaseDate", t."scheduledStart", t."scheduledEnd", t."status"::text AS "status",
         COALESCE(t."curation_status", 'DRAFT') AS "curationStatus",
+        (
+          COALESCE(t."questions_released", false)
+          AND COALESCE(qc."questionCount", 0) > 0
+          AND COALESCE(qc."readyQuestionCount", 0) >= COALESCE(qc."questionCount", 0)
+        ) AS "questionsReleased",
+        t."questions_released_at" AS "questionsReleasedAt",
+        COALESCE(t."break_seconds", 60)::int AS "breakSeconds",
         t."revision_notes" AS "revisionNotes",
         t."reviewed_by" AS "reviewedBy",
         t."reviewed_at" AS "reviewedAt",
         t."isPublic", t."referralCode", t."createdAt",
         COALESCE(qc."questionCount", 0)::int AS "questionCount",
         COALESCE(qc."readyQuestionCount", 0)::int AS "readyQuestionCount",
-        COALESCE(sd."totalDurationMinutes", 0)::int AS "totalDurationMinutes"
+        COALESCE(sd."totalDurationMinutes", 195)::int AS "totalDurationMinutes",
+        COALESCE(sd."totalTargetQuestions", 160)::int AS "totalTargetQuestions"
       FROM public."TryOut" t
       LEFT JOIN (
         SELECT
@@ -833,9 +951,20 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         GROUP BY 1
       ) qc ON qc."tid" = t."id"
       LEFT JOIN (
-        SELECT "try_out_id" AS "tid", SUM("duration_minutes")::int AS "totalDurationMinutes"
-        FROM public."Subtest"
-        GROUP BY "try_out_id"
+        SELECT
+          dedup."try_out_id" AS "tid",
+          SUM(dedup."duration_minutes")::int AS "totalDurationMinutes",
+          SUM(dedup."target_question_count")::int AS "totalTargetQuestions"
+        FROM (
+          SELECT DISTINCT ON ("try_out_id", "name")
+            "try_out_id",
+            "name",
+            "duration_minutes",
+            COALESCE("target_question_count", 20) AS "target_question_count"
+          FROM public."Subtest"
+          ORDER BY "try_out_id", "name", "id" ASC
+        ) dedup
+        GROUP BY dedup."try_out_id"
       ) sd ON sd."tid" = t."id"
       ORDER BY t."createdAt" DESC
       LIMIT 200
@@ -843,23 +972,51 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return rows;
   }
 
-  async createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'batch' | 'releaseDate' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput) {
+  async createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput) {
     await this.ensureLifecycleSchema();
     const now = Date.now();
     const start = new Date(input.scheduledStart);
     const end = new Date(input.scheduledEnd);
+    const releaseDate = input.releaseDate ? new Date(input.releaseDate) : new Date();
+    const batch = input.batch || 'SNBT_2027';
+    const breakSeconds = input.breakSeconds !== undefined ? Math.max(0, Math.min(1800, Math.round(Number(input.breakSeconds)))) : 60;
     const status = now > end.getTime() ? 'FINISHED' : now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
     const rows = await this.query<Array<Record<string, unknown> & { id: string }>>(Prisma.sql`
-      INSERT INTO public."TryOut" ("id", "title", "description", "solutionPrice", "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status", "curation_status", "isPublic", "referralCode")
-      VALUES (${randomUUID()}, ${input.title}, ${input.description ?? null}, ${input.solutionPrice}, CAST(${input.batch} AS public."TryoutBatch"), ${new Date(input.releaseDate)}, ${start}, ${end}, CAST(${status} AS public."TryoutStatus"), 'DRAFT', ${input.isPublic ?? true}, ${input.referralCode || null})
-      RETURNING "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status", COALESCE("curation_status", 'DRAFT') AS "curationStatus", "revision_notes" AS "revisionNotes", "reviewed_by" AS "reviewedBy", "reviewed_at" AS "reviewedAt", "isPublic", "referralCode", "createdAt"
+      INSERT INTO public."TryOut" (
+        "id", "title", "description", "solutionPrice", "batch", "releaseDate",
+        "scheduledStart", "scheduledEnd", "status", "curation_status",
+        "questions_released", "break_seconds", "isPublic", "referralCode"
+      )
+      VALUES (
+        ${randomUUID()}, ${input.title}, ${input.description ?? null}, ${input.solutionPrice},
+        CAST(${batch} AS public."TryoutBatch"), ${releaseDate},
+        ${start}, ${end}, CAST(${status} AS public."TryoutStatus"), 'DRAFT',
+        false, ${breakSeconds}, ${input.isPublic ?? true}, ${input.referralCode || null}
+      )
+      RETURNING
+        "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
+        "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
+        COALESCE("curation_status", 'DRAFT') AS "curationStatus",
+        COALESCE("questions_released", false) AS "questionsReleased",
+        "questions_released_at" AS "questionsReleasedAt",
+        COALESCE("break_seconds", 60)::int AS "breakSeconds",
+        "revision_notes" AS "revisionNotes", "reviewed_by" AS "reviewedBy", "reviewed_at" AS "reviewedAt",
+        "isPublic", "referralCode", "createdAt"
     `);
     const created = Array.isArray(rows) ? rows[0] ?? null : null;
     if (created?.id) {
       await this.ensureTryoutSubtests(created.id);
     }
     this.invalidateOverview();
-    return created ? { ...created, questionCount: 0, readyQuestionCount: 0, totalDurationMinutes: 195 } : null;
+    return created
+      ? {
+          ...created,
+          questionCount: 0,
+          readyQuestionCount: 0,
+          totalDurationMinutes: 195,
+          totalTargetQuestions: 160,
+        }
+      : null;
   }
 
   async updateTryout(id: string, input: TryoutInput) {
@@ -877,20 +1034,31 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const now = Date.now();
     const scheduleChanged = input.scheduledStart !== undefined || input.scheduledEnd !== undefined;
     const status = end && now > end.getTime() ? 'FINISHED' : start && end && now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
+    const breakSeconds =
+      input.breakSeconds !== undefined ? Math.max(0, Math.min(1800, Math.round(Number(input.breakSeconds)))) : null;
     const rows = await this.query(Prisma.sql`
       UPDATE public."TryOut" SET
         "title" = COALESCE(${input.title ?? null}, "title"),
         "description" = CASE WHEN ${input.description !== undefined} THEN ${input.description ?? null} ELSE "description" END,
         "solutionPrice" = COALESCE(${input.solutionPrice ?? null}, "solutionPrice"),
-        "batch" = CASE WHEN ${input.batch !== undefined} THEN CAST(${input.batch ?? 'SNBT'} AS public."TryoutBatch") ELSE "batch" END,
+        "batch" = CASE WHEN ${input.batch !== undefined} THEN CAST(${input.batch ?? 'SNBT_2027'} AS public."TryoutBatch") ELSE "batch" END,
         "releaseDate" = COALESCE(${input.releaseDate ? new Date(input.releaseDate) : null}, "releaseDate"),
         "scheduledStart" = CASE WHEN ${input.scheduledStart !== undefined} THEN ${start} ELSE "scheduledStart" END,
         "scheduledEnd" = CASE WHEN ${input.scheduledEnd !== undefined} THEN ${end} ELSE "scheduledEnd" END,
         "isPublic" = COALESCE(${input.isPublic ?? null}, "isPublic"),
         "referralCode" = CASE WHEN ${input.referralCode !== undefined} THEN ${input.referralCode || null} ELSE "referralCode" END,
+        "break_seconds" = COALESCE(${breakSeconds}, "break_seconds"),
         "status" = CASE WHEN ${scheduleChanged} THEN CAST(${status} AS public."TryoutStatus") ELSE "status" END
       WHERE "id" = ${id}
-      RETURNING "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status", COALESCE("curation_status", 'DRAFT') AS "curationStatus", "revision_notes" AS "revisionNotes", "reviewed_by" AS "reviewedBy", "reviewed_at" AS "reviewedAt", "isPublic", "referralCode", "createdAt"
+      RETURNING
+        "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
+        "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
+        COALESCE("curation_status", 'DRAFT') AS "curationStatus",
+        COALESCE("questions_released", false) AS "questionsReleased",
+        "questions_released_at" AS "questionsReleasedAt",
+        COALESCE("break_seconds", 60)::int AS "breakSeconds",
+        "revision_notes" AS "revisionNotes", "reviewed_by" AS "reviewedBy", "reviewed_at" AS "reviewedAt",
+        "isPublic", "referralCode", "createdAt"
     `);
     this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
@@ -1813,7 +1981,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return 'PU';
   }
 
-  /** Ensures a tryout owns all 7 official UTBK Subtest rows and returns a code -> subtestId map. */
+  /** Ensures a tryout owns all 7 official UTBK Subtest rows (deduplicated) and returns a code -> subtestId map. */
   private async ensureTryoutSubtests(tryoutId: string): Promise<Map<string, string>> {
     const tryoutRows = await this.query<Array<{ id: string }>>(Prisma.sql`
       SELECT "id" FROM public."TryOut" WHERE "id" = ${tryoutId} LIMIT 1
@@ -1822,35 +1990,77 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       throw new NotFoundException('Tryout tidak ditemukan.');
     }
 
-    const definitions: Array<{ code: 'PU' | 'PPU' | 'PBM' | 'PK' | 'LBI' | 'LBE' | 'PM'; duration: number; order: number }> = [
-      { code: 'PU', duration: 30, order: 1 },
-      { code: 'PPU', duration: 15, order: 2 },
-      { code: 'PBM', duration: 25, order: 3 },
-      { code: 'PK', duration: 20, order: 4 },
-      { code: 'LBI', duration: 43, order: 5 },
-      { code: 'LBE', duration: 20, order: 6 },
-      { code: 'PM', duration: 42, order: 7 },
+    const definitions: Array<{
+      code: 'PU' | 'PPU' | 'PBM' | 'PK' | 'LBI' | 'LBE' | 'PM';
+      duration: number;
+      targetQuestionCount: number;
+      order: number;
+    }> = [
+      { code: 'PU', duration: 30, targetQuestionCount: 30, order: 1 },
+      { code: 'PPU', duration: 15, targetQuestionCount: 20, order: 2 },
+      { code: 'PBM', duration: 25, targetQuestionCount: 20, order: 3 },
+      { code: 'PK', duration: 20, targetQuestionCount: 20, order: 4 },
+      { code: 'LBI', duration: 43, targetQuestionCount: 30, order: 5 },
+      { code: 'LBE', duration: 20, targetQuestionCount: 20, order: 6 },
+      { code: 'PM', duration: 42, targetQuestionCount: 20, order: 7 },
     ];
 
     const existing = await this.query<Array<{ id: string; name: string }>>(Prisma.sql`
-      SELECT "id", "name"::text AS "name"
-      FROM public."Subtest"
-      WHERE "try_out_id" = ${tryoutId}
-      ORDER BY "order" ASC
+      SELECT
+        s."id",
+        s."name"::text AS "name"
+      FROM public."Subtest" s
+      WHERE s."try_out_id" = ${tryoutId}
+      ORDER BY
+        (SELECT COUNT(*) FROM public."Question" q WHERE q."subtest_id" = s."id") DESC,
+        s."order" ASC,
+        s."id" ASC
     `);
     const map = new Map<string, string>();
+    const duplicateIds: Array<{ dupId: string; canonicalId: string }> = [];
     for (const row of existing) {
-      map.set(row.name, row.id);
+      const canonical = map.get(row.name);
+      if (!canonical) {
+        map.set(row.name, row.id);
+      } else {
+        duplicateIds.push({ dupId: row.id, canonicalId: canonical });
+      }
+    }
+
+    for (const dup of duplicateIds) {
+      await this.query(Prisma.sql`
+        UPDATE public."Question"
+        SET "subtest_id" = ${dup.canonicalId}
+        WHERE "subtest_id" = ${dup.dupId}
+      `);
+      await this.query(Prisma.sql`
+        DELETE FROM public."Subtest"
+        WHERE "id" = ${dup.dupId}
+      `);
     }
 
     for (const def of definitions) {
       if (map.has(def.code)) continue;
       const newSubtestId = randomUUID();
       await this.query(Prisma.sql`
-        INSERT INTO public."Subtest" ("id", "try_out_id", "name", "duration_minutes", "order")
-        VALUES (${newSubtestId}, ${tryoutId}, CAST(${def.code} AS public."SubtestName"), ${def.duration}, ${def.order})
+        INSERT INTO public."Subtest" ("id", "try_out_id", "name", "duration_minutes", "target_question_count", "order")
+        VALUES (
+          ${newSubtestId},
+          ${tryoutId},
+          CAST(${def.code} AS public."SubtestName"),
+          ${def.duration},
+          ${def.targetQuestionCount},
+          ${def.order}
+        )
+        ON CONFLICT ("try_out_id", "name") DO NOTHING
       `);
-      map.set(def.code, newSubtestId);
+      const confirmed = await this.query<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM public."Subtest"
+        WHERE "try_out_id" = ${tryoutId} AND "name" = CAST(${def.code} AS public."SubtestName")
+        LIMIT 1
+      `);
+      map.set(def.code, confirmed[0]?.id ?? newSubtestId);
     }
 
     return map;
@@ -1875,22 +2085,170 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return { ...row, isLocked };
   }
 
-  async listQuestionBatches(): Promise<Array<{ batch: string; count: number }>> {
+  private normalizeBatchTargetKind(
+    target?: string | null,
+    tryoutId?: string | null,
+    isInPractice?: boolean,
+  ): 'FOR_PRACTICE' | 'FOR_TRYOUT' | 'DRAFT' {
+    const cleanTarget = String(target || 'DRAFT').toUpperCase().trim();
+    if (tryoutId || cleanTarget === 'FOR_TRYOUT') return 'FOR_TRYOUT';
+    if (isInPractice || cleanTarget === 'FOR_PRACTICE') return 'FOR_PRACTICE';
+    return 'DRAFT';
+  }
+
+  private getBatchTargetKindLabel(
+    kind: 'FOR_PRACTICE' | 'FOR_TRYOUT' | 'DRAFT',
+    tryoutTitle?: string | null,
+  ): string {
+    if (kind === 'FOR_PRACTICE') return 'Latihan (/latihan)';
+    if (kind === 'FOR_TRYOUT') {
+      return tryoutTitle ? `Tryout (${tryoutTitle})` : 'Tryout';
+    }
+    return 'Eksperimen / Bank Soal';
+  }
+
+  /**
+   * Enforces that a question batch (`batch`) never mixes different question target types
+   * (FOR_PRACTICE vs FOR_TRYOUT vs DRAFT/BANK) or different tryout packages.
+   */
+  private async assertBatchTargetCompatibility(
+    batchName: string | null | undefined,
+    target?: string | null,
+    tryoutId?: string | null,
+    excludeQuestionId?: string,
+  ): Promise<void> {
+    const cleanBatch = batchName ? String(batchName).trim() : '';
+    if (!cleanBatch) return;
+    const cleanTarget = String(target || 'DRAFT').toUpperCase().trim();
+    if (cleanTarget === 'SOAL_ASLI') return;
+
+    const excludeClause = excludeQuestionId
+      ? Prisma.sql`AND q."id" <> ${excludeQuestionId}`
+      : Prisma.empty;
+
+    const existingRows = await this.query<
+      Array<{
+        target: string;
+        tryoutId: string | null;
+        tryoutTitle: string | null;
+        isInPractice: boolean;
+      }>
+    >(Prisma.sql`
+      SELECT
+        COALESCE(q."target", 'DRAFT') AS "target",
+        COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
+        COALESCE(tout."title", sub_tout."title") AS "tryoutTitle",
+        (
+          q."target" = 'FOR_PRACTICE'
+          OR EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id")
+        ) AS "isInPractice"
+      FROM public."Question" q
+      LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
+      LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
+      LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
+      WHERE q."batch" IS NOT NULL
+        AND LOWER(TRIM(q."batch")) = LOWER(${cleanBatch})
+        AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
+        ${excludeClause}
+    `);
+
+    if (existingRows.length === 0) return;
+
+    let existingKind: 'FOR_PRACTICE' | 'FOR_TRYOUT' | 'DRAFT' = 'DRAFT';
+    let existingTryoutId: string | null = null;
+    let existingTryoutTitle: string | null = null;
+
+    for (const row of existingRows) {
+      const k = this.normalizeBatchTargetKind(row.target, row.tryoutId, Boolean(row.isInPractice));
+      if (k === 'FOR_TRYOUT') {
+        existingKind = 'FOR_TRYOUT';
+        if (row.tryoutId && !existingTryoutId) {
+          existingTryoutId = row.tryoutId;
+          existingTryoutTitle = row.tryoutTitle || null;
+        }
+      } else if (k === 'FOR_PRACTICE' && existingKind !== 'FOR_TRYOUT') {
+        existingKind = 'FOR_PRACTICE';
+      }
+    }
+
+    const requestedKind = this.normalizeBatchTargetKind(cleanTarget, tryoutId, false);
+    if (existingKind !== requestedKind) {
+      throw new BadRequestException(
+        `Proteksi Batch Soal: Batch "${cleanBatch}" sudah terdaftar untuk jenis soal ${this.getBatchTargetKindLabel(
+          existingKind,
+          existingTryoutTitle,
+        )} dan tidak boleh dicampur dengan jenis soal ${this.getBatchTargetKindLabel(
+          requestedKind,
+        )}. Setiap batch hanya boleh berisi 1 jenis soal — silakan pilih atau buat nama batch baru.`,
+      );
+    }
+
+    if (
+      existingKind === 'FOR_TRYOUT' &&
+      requestedKind === 'FOR_TRYOUT' &&
+      existingTryoutId &&
+      tryoutId &&
+      existingTryoutId !== tryoutId
+    ) {
+      throw new BadRequestException(
+        `Proteksi Batch Soal: Batch "${cleanBatch}" sudah terikat pada paket Tryout "${
+          existingTryoutTitle || existingTryoutId
+        }" dan tidak boleh dicampur dengan paket Tryout lain. Silakan buat nama batch baru.`,
+      );
+    }
+  }
+
+  async listQuestionBatches(): Promise<
+    Array<{
+      batch: string;
+      count: number;
+      targetKind: 'FOR_PRACTICE' | 'FOR_TRYOUT' | 'DRAFT';
+      tryoutId: string | null;
+      tryoutTitle: string | null;
+    }>
+  > {
     await this.ensureLifecycleSchema();
-    const rows = await this.query<Array<{ batch: string; count: number }>>(Prisma.sql`
+    const rows = await this.query<
+      Array<{
+        batch: string;
+        count: number;
+        hasPractice: boolean;
+        hasTryout: boolean;
+        tryoutId: string | null;
+        tryoutTitle: string | null;
+      }>
+    >(Prisma.sql`
       SELECT
         TRIM(q."batch") AS "batch",
-        COUNT(*)::int AS "count"
+        COUNT(*)::int AS "count",
+        BOOL_OR(
+          q."target" = 'FOR_PRACTICE'
+          OR EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id")
+        ) AS "hasPractice",
+        BOOL_OR(
+          q."target" = 'FOR_TRYOUT'
+          OR COALESCE(q."tryoutId", sub."try_out_id") IS NOT NULL
+        ) AS "hasTryout",
+        MAX(COALESCE(q."tryoutId", sub."try_out_id")) AS "tryoutId",
+        MAX(COALESCE(tout."title", sub_tout."title")) AS "tryoutTitle"
       FROM public."Question" q
+      LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
+      LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
+      LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
       WHERE q."batch" IS NOT NULL
         AND TRIM(q."batch") <> ''
         AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
       GROUP BY TRIM(q."batch")
       ORDER BY MAX(q."createdAt") DESC, TRIM(q."batch") ASC
     `);
     return rows.map((row) => ({
       batch: String(row.batch || '').trim(),
       count: Number(row.count) || 0,
+      targetKind: row.hasTryout ? 'FOR_TRYOUT' : row.hasPractice ? 'FOR_PRACTICE' : 'DRAFT',
+      tryoutId: row.tryoutId ? String(row.tryoutId) : null,
+      tryoutTitle: row.tryoutTitle ? String(row.tryoutTitle) : null,
     }));
   }
 
@@ -2026,6 +2384,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const pattern = input.pattern || null;
     const batch = input.batch !== undefined && input.batch !== null ? String(input.batch).trim() || null : null;
 
+    await this.assertBatchTargetCompatibility(batch, target, tryoutId);
+
     await this.query(Prisma.sql`
       INSERT INTO public."Question" (
         "id", "subtest", "topic_id", "subtopic_id", "pattern", "batch", "difficulty", "type", "target", "status",
@@ -2080,6 +2440,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     await this.ensureLifecycleSchema();
     const currentRows = await this.query<Array<{
       subtest: string;
+      batch: string | null;
       target: string;
       status: string;
       tryoutId: string | null;
@@ -2087,6 +2448,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }>>(Prisma.sql`
       SELECT
         q."subtest",
+        q."batch",
         COALESCE(q."target", 'DRAFT') AS "target",
         COALESCE(q."status", 'DRAFT') AS "status",
         COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
@@ -2107,6 +2469,20 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       throw new BadRequestException(
         `Soal ini sedang terkunci di Tryout aktif (${lockInfo.tryoutTitle || 'Tryout'}) dan tidak boleh dipindahkan ke Latihan sebelum Tryout selesai.`,
       );
+    }
+
+    if (target === 'FOR_TRYOUT' || Boolean(input.tryoutId)) {
+      const practiceAttempts = await this.query<Array<{ count: number }>>(Prisma.sql`
+        SELECT COUNT(*)::int AS "count"
+        FROM public."PracticeAttempt" pat
+        JOIN public."user" u ON u."id" = pat."user_id"
+        WHERE pat."question_id" = ${id} AND COALESCE(u."isSandbox", false) = false
+      `);
+      if (Number(practiceAttempts[0]?.count ?? 0) > 0) {
+        throw new BadRequestException(
+          'Proteksi Anti-Bocor: Soal ini sudah pernah dikerjakan siswa di modul Latihan sehingga tidak boleh dipindahkan ke Tryout.',
+        );
+      }
     }
 
     const nextStatus = explicitStatus !== undefined
@@ -2156,6 +2532,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const pattern = input.pattern !== undefined ? (input.pattern || null) : undefined;
     const batch = input.batch !== undefined ? (input.batch ? String(input.batch).trim() || null : null) : undefined;
     const revisionNotes = input.revisionNotes !== undefined ? (input.revisionNotes || null) : undefined;
+    const effectiveBatch = batch !== undefined ? batch : (currentQuestion.batch ? String(currentQuestion.batch).trim() || null : null);
+
+    await this.assertBatchTargetCompatibility(effectiveBatch, effectiveTarget, nextTryoutId, id);
 
     await this.query(Prisma.sql`
       UPDATE public."Question" SET
@@ -2668,6 +3047,78 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const curriculumTopics = await this.listTopics();
 
+    const practiceBatchRows = await this.query<Array<{
+      batch: string;
+      subtest: string;
+      target: string;
+      status: string;
+      tryoutId: string | null;
+      isInPractice: boolean;
+    }>>(Prisma.sql`
+      SELECT
+        TRIM(q."batch") AS "batch",
+        q."subtest",
+        COALESCE(q."target", 'DRAFT') AS "target",
+        COALESCE(q."status", 'DRAFT') AS "status",
+        COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
+        (q."target" = 'FOR_PRACTICE' OR EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id")) AS "isInPractice"
+      FROM public."Question" q
+      LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
+      WHERE q."batch" IS NOT NULL
+        AND TRIM(q."batch") <> ''
+        AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
+    `);
+
+    type PracticeBatchAgg = {
+      batch: string;
+      totalInBatch: number;
+      eligibleCount: number;
+      alreadyInPracticeCount: number;
+      lockedTryoutCount: number;
+      notReadyCount: number;
+      subtestBreakdown: Record<string, number>;
+    };
+    const practiceBatchMap = new Map<string, PracticeBatchAgg>();
+    for (const row of practiceBatchRows) {
+      const key = String(row.batch || '').trim();
+      if (!key) continue;
+      let agg = practiceBatchMap.get(key);
+      if (!agg) {
+        agg = {
+          batch: key,
+          totalInBatch: 0,
+          eligibleCount: 0,
+          alreadyInPracticeCount: 0,
+          lockedTryoutCount: 0,
+          notReadyCount: 0,
+          subtestBreakdown: {},
+        };
+        practiceBatchMap.set(key, agg);
+      }
+      agg.totalInBatch += 1;
+      if (row.tryoutId || row.target === 'FOR_TRYOUT') {
+        agg.lockedTryoutCount += 1;
+        continue;
+      }
+      if (row.isInPractice) {
+        agg.alreadyInPracticeCount += 1;
+        continue;
+      }
+      if (row.status !== 'READY') {
+        agg.notReadyCount += 1;
+      }
+      agg.eligibleCount += 1;
+      const code = this.mapQuestionSubtestToCode(row.subtest);
+      agg.subtestBreakdown[code] = (agg.subtestBreakdown[code] || 0) + 1;
+    }
+
+    const batchSummaries = Array.from(practiceBatchMap.values()).sort((a, b) =>
+      b.eligibleCount !== a.eligibleCount
+        ? b.eligibleCount - a.eligibleCount
+        : a.batch.localeCompare(b.batch, 'id', { numeric: true }),
+    );
+
     return {
       assignedQuestions: assignedRows.map((r) => ({
         ...r,
@@ -2681,17 +3132,19 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         isLockedInTryout: Boolean(r.isLockedInTryout),
         hasSolution: Boolean(r.hasSolution),
       })),
+      batchSummaries,
       subtestStocks: subtestMap,
       subtestStockStats,
       curriculumTopics,
     };
   }
 
-  async assignPracticeQuestions(questionIds: string[], actorLabel = 'Admin') {
+  async assignPracticeQuestions(questionIds: string[], actorLabel = 'Admin', batch?: string) {
     await this.ensureLifecycleSchema();
     const cleanIds = Array.from(new Set((questionIds || []).map((x) => String(x).trim()).filter(Boolean)));
-    if (cleanIds.length === 0) {
-      throw new BadRequestException('Pilih minimal 1 soal untuk dimasukkan ke Latihan.');
+    const cleanBatch = batch ? String(batch).trim() : '';
+    if (cleanIds.length === 0 && !cleanBatch) {
+      throw new BadRequestException('Pilih minimal 1 soal atau pilih 1 batch untuk dimasukkan ke Latihan.');
     }
 
     const candidates = await this.query<Array<{
@@ -2701,6 +3154,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       tryoutId: string | null;
       tryoutTitle: string | null;
       tryoutStatus: string | null;
+      isInPractice: boolean;
     }>>(Prisma.sql`
       SELECT
         q."id",
@@ -2708,23 +3162,60 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         COALESCE(q."target", 'DRAFT') AS "target",
         COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
         COALESCE(tout."title", sub_tout."title") AS "tryoutTitle",
-        COALESCE(tout."status"::text, sub_tout."status"::text) AS "tryoutStatus"
+        COALESCE(tout."status"::text, sub_tout."status"::text) AS "tryoutStatus",
+        (q."target" = 'FOR_PRACTICE' OR EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id")) AS "isInPractice"
       FROM public."Question" q
       LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
       LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
       LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
-      WHERE q."id" IN (${Prisma.join(cleanIds)})
+      WHERE ${
+        cleanIds.length > 0
+          ? Prisma.sql`q."id" IN (${Prisma.join(cleanIds)})`
+          : Prisma.sql`TRIM(COALESCE(q."batch", '')) = ${cleanBatch}`
+      }
+        AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
     `);
 
-    const blockedTryout = candidates.filter((c) => Boolean(c.tryoutId));
-    if (blockedTryout.length > 0) {
-      throw new BadRequestException(
-        `Proteksi Anti-Bocor: ${blockedTryout.length} soal sudah terikat ke paket Tryout (${blockedTryout[0].tryoutTitle || 'Tryout'}) dan tidak boleh masuk Latihan.`,
-      );
+    if (cleanIds.length > 0) {
+      const blockedTryout = candidates.filter((c) => Boolean(c.tryoutId) || c.target === 'FOR_TRYOUT');
+      if (blockedTryout.length > 0) {
+        throw new BadRequestException(
+          `Proteksi Tata Kelola Objek: ${blockedTryout.length} soal dialokasikan untuk Tryout (${blockedTryout[0].tryoutTitle || 'Pool Tryout'}) dan tidak boleh masuk Latihan.`,
+        );
+      }
+    }
+
+    let skippedAlreadyPractice = 0;
+    let skippedTryout = 0;
+    const eligible = candidates.filter((c) => {
+      if (c.tryoutId || c.target === 'FOR_TRYOUT') {
+        skippedTryout += 1;
+        return false;
+      }
+      if (c.isInPractice && cleanBatch) {
+        skippedAlreadyPractice += 1;
+        return false;
+      }
+      return true;
+    });
+
+    if (eligible.length === 0) {
+      if (cleanBatch) {
+        if (skippedTryout > 0 && skippedAlreadyPractice === 0) {
+          throw new BadRequestException(
+            `Batch "${cleanBatch}" adalah Batch Tryout (${skippedTryout} soal berstatus Untuk Tryout) sehingga tidak dapat ditarik ke Latihan.`,
+          );
+        }
+        throw new BadRequestException(
+          `Tidak ada soal baru yang dapat ditarik dari batch "${cleanBatch}" (${skippedAlreadyPractice} sudah di Latihan, ${skippedTryout} terkunci di Tryout).`,
+        );
+      }
+      throw new BadRequestException('Semua soal yang dipilih sudah berada di Latihan.');
     }
 
     let insertedCount = 0;
-    for (const c of candidates) {
+    for (const c of eligible) {
       if (c.status === 'READY') {
         await this.query(Prisma.sql`
           INSERT INTO public."PracticeAssignment" ("id", "question_id", "assigned_by", "assigned_at")
@@ -2740,7 +3231,12 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       insertedCount++;
     }
 
-    return { assignedCount: insertedCount };
+    return {
+      assignedCount: insertedCount,
+      skippedAlreadyPractice,
+      skippedTryout,
+      batch: cleanBatch || null,
+    };
   }
 
   async unassignPracticeQuestion(questionId: string) {
@@ -2769,6 +3265,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       SELECT "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
              "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
              COALESCE("curation_status", 'DRAFT') AS "curationStatus",
+             COALESCE("questions_released", false) AS "questionsReleased",
+             "questions_released_at" AS "questionsReleasedAt",
+             COALESCE("break_seconds", 60)::int AS "breakSeconds",
              "revision_notes" AS "revisionNotes",
              "reviewed_by" AS "reviewedBy",
              "reviewed_at" AS "reviewedAt",
@@ -2805,6 +3304,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       id: string;
       name: string;
       durationMinutes: number;
+      targetQuestionCount: number;
       order: number;
       questionCount: number;
       readyCount: number;
@@ -2813,13 +3313,14 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         sub."id",
         sub."name"::text AS "name",
         sub."duration_minutes" AS "durationMinutes",
+        COALESCE(sub."target_question_count", 20)::int AS "targetQuestionCount",
         sub."order",
         COUNT(DISTINCT q."id")::int AS "questionCount",
         COUNT(DISTINCT CASE WHEN COALESCE(q."status", 'DRAFT') = 'READY' THEN q."id" END)::int AS "readyCount"
       FROM public."Subtest" sub
       LEFT JOIN public."Question" q ON q."subtest_id" = sub."id"
       WHERE sub."try_out_id" = ${tryoutId}
-      GROUP BY sub."id", sub."name", sub."duration_minutes", sub."order"
+      GROUP BY sub."id", sub."name", sub."duration_minutes", sub."target_question_count", sub."order"
       ORDER BY sub."order" ASC
     `);
 
@@ -2936,6 +3437,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE q."batch" IS NOT NULL
         AND TRIM(q."batch") <> ''
         AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
     `);
 
     type BatchAgg = {
@@ -2980,6 +3482,10 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         agg.lockedOtherCount += 1;
         continue;
       }
+      if (row.isInPractice || row.target === 'FOR_PRACTICE') {
+        agg.practiceCount += 1;
+        continue;
+      }
       if (row.status !== 'READY') {
         agg.notReadyCount += 1;
       }
@@ -2988,7 +3494,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       agg.subtestBreakdown[code] = (agg.subtestBreakdown[code] || 0) + 1;
       if (!row.tryoutId && row.target === 'FOR_TRYOUT') agg.poolTryoutCount += 1;
       if (!row.tryoutId && ['DRAFT', 'SANDBOX', 'BANK'].includes(row.target)) agg.bankCount += 1;
-      if (row.isInPractice || row.target === 'FOR_PRACTICE') agg.practiceCount += 1;
     }
 
     const batchSummaries = Array.from(batchMap.values()).sort((a, b) =>
@@ -3014,14 +3519,21 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const curriculumTopics = await this.listTopics();
     const totalDurationMinutes = subtests.reduce((acc, s) => acc + (Number(s.durationMinutes) || 0), 0);
+    const totalTargetQuestions = subtests.reduce((acc, s) => acc + (Number(s.targetQuestionCount) || 20), 0);
     const readyQuestionCount = assignedQuestions.filter((q) => String(q.status || '').toUpperCase() === 'READY').length;
 
     return {
       tryout: {
         ...tryout,
+        questionsReleased: Boolean(
+          tryout.questionsReleased &&
+            assignedQuestions.length > 0 &&
+            readyQuestionCount >= assignedQuestions.length,
+        ),
         questionCount: assignedQuestions.length,
         readyQuestionCount,
         totalDurationMinutes,
+        totalTargetQuestions,
       },
       subtests,
       assignedQuestions,
@@ -3078,6 +3590,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           : Prisma.sql`TRIM(COALESCE(q."batch", '')) = ${cleanBatch}`
       }
         AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
     `);
 
     if (cleanIds.length > 0) {
@@ -3089,11 +3602,20 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           `Proteksi Anti-Bocor: ${lockedOther.length} soal sudah terikat ke paket Tryout lain (${lockedOther[0].tryoutTitle || 'Tryout'}).`,
         );
       }
+      const lockedPractice = candidates.filter(
+        (c) => Boolean(c.isInPractice || c.target === 'FOR_PRACTICE'),
+      );
+      if (lockedPractice.length > 0) {
+        throw new BadRequestException(
+          `Proteksi Tata Kelola Objek: ${lockedPractice.length} soal dialokasikan khusus untuk Latihan (FOR_PRACTICE) dan tidak boleh ditarik ke Tryout agar soal ujian tetap eksklusif.`,
+        );
+      }
     }
 
     let skippedAlreadyHere = 0;
-    let skippedNotReady = 0;
+    const skippedNotReady = 0;
     let skippedLockedOther = 0;
+    let skippedPractice = 0;
     const eligible = candidates.filter((c) => {
       if (c.tryoutId === tryoutId) {
         skippedAlreadyHere += 1;
@@ -3103,26 +3625,30 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         skippedLockedOther += 1;
         return false;
       }
+      if (c.isInPractice || c.target === 'FOR_PRACTICE') {
+        skippedPractice += 1;
+        return false;
+      }
       return true;
     });
 
     if (eligible.length === 0) {
       if (cleanBatch) {
+        if (skippedPractice > 0 && skippedAlreadyHere === 0 && skippedLockedOther === 0) {
+          throw new BadRequestException(
+            `Proteksi Tata Kelola Objek: Batch "${cleanBatch}" adalah Batch Latihan (${skippedPractice} soal berstatus Untuk Latihan) sehingga tidak dapat ditarik ke Tryout.`,
+          );
+        }
         throw new BadRequestException(
-          `Tidak ada soal yang bebas di batch "${cleanBatch}" (${skippedAlreadyHere} sudah di Tryout ini, ${skippedLockedOther} terikat Tryout lain).`,
+          `Tidak ada soal yang dapat ditarik ke Tryout dari batch "${cleanBatch}" (${skippedAlreadyHere} sudah di Tryout ini, ${skippedLockedOther} terikat Tryout lain, ${skippedPractice} terkunci di Latihan).`,
         );
       }
       throw new BadRequestException('Semua soal yang dipilih sudah berada di Tryout ini.');
     }
 
-    let removedFromPracticeCount = 0;
     for (const c of eligible) {
       const code = this.mapQuestionSubtestToCode(c.subtest);
       const subtestId = subtestMap.get(code) ?? null;
-      if (c.isInPractice) {
-        await this.query(Prisma.sql`DELETE FROM public."PracticeAssignment" WHERE "question_id" = ${c.id}`);
-        removedFromPracticeCount += 1;
-      }
       await this.query(Prisma.sql`
         UPDATE public."Question"
         SET
@@ -3138,10 +3664,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     this.invalidateOverview();
     return {
       assignedCount: eligible.length,
-      removedFromPracticeCount,
+      removedFromPracticeCount: 0,
       skippedAlreadyHere,
       skippedNotReady,
       skippedLockedOther,
+      skippedPractice,
       batch: cleanBatch || null,
     };
   }
@@ -3207,15 +3734,30 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     };
   }
 
-  /** Publishes or unpublishes a tryout package once its assigned questions have passed QC (READY). */
+  /**
+   * Two-stage Tryout workflow:
+   * - Stage 1 (PUBLISH_CATALOG): Publishes tryout schedule & registration to the public catalog immediately (auto-sets releaseDate = NOW()), even while questions are still being prepared.
+   * - Stage 2 (RELEASE_QUESTIONS / APPROVE): Launches the exam questions once all assigned questions have passed QC (READY).
+   * - UNRELEASE_QUESTIONS: Locks exam questions back without closing public registration.
+   * - UNPUBLISH: Pulls the tryout back to DRAFT and locks exam questions.
+   */
   async reviewTryoutWorkflow(
     tryoutId: string,
     input: { action: string; revisionNotes?: string },
     reviewerLabel = 'Admin',
   ) {
     await this.ensureLifecycleSchema();
-    const existingRows = await this.query<Array<{ id: string; curationStatus: string; title: string }>>(Prisma.sql`
-      SELECT "id", COALESCE("curation_status", 'DRAFT') AS "curationStatus", "title"
+    const existingRows = await this.query<Array<{
+      id: string;
+      curationStatus: string;
+      questionsReleased: boolean;
+      title: string;
+    }>>(Prisma.sql`
+      SELECT
+        "id",
+        COALESCE("curation_status", 'DRAFT') AS "curationStatus",
+        COALESCE("questions_released", false) AS "questionsReleased",
+        "title"
       FROM public."TryOut"
       WHERE "id" = ${tryoutId}
       LIMIT 1
@@ -3236,6 +3778,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const action = String(input.action || '').toUpperCase().trim();
     let nextCurationStatus = existing.curationStatus;
+    let nextQuestionsReleased = existing.questionsReleased;
+    let updateReleaseDate = false;
+    let updateQuestionsReleasedAt = false;
     let revisionNotesUpdate: string | null | undefined = undefined;
 
     if (action === 'SUBMIT_QC' || action === 'RESUBMIT_QC') {
@@ -3249,14 +3794,23 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         throw new BadRequestException('Catatan revisi wajib diisi.');
       }
       nextCurationStatus = 'NEEDS_REVISION';
+      nextQuestionsReleased = false;
       revisionNotesUpdate = notes;
-    } else if (action === 'APPROVE') {
+    } else if (action === 'PUBLISH_CATALOG') {
+      // Stage 1: Open registration in public catalog immediately (questions do not need to be ready yet).
+      nextCurationStatus = 'PUBLISHED';
+      updateReleaseDate = true;
+      revisionNotesUpdate = null;
+    } else if (action === 'RELEASE_QUESTIONS' || action === 'APPROVE') {
+      // Stage 2: Launch exam questions (requires >0 questions and 100% READY).
       if (questionCount <= 0) {
-        throw new BadRequestException('Tryout masih kosong. Masukkan soal terlebih dahulu sebelum mem-publish Tryout.');
+        throw new BadRequestException(
+          'Belum ada soal di Tryout ini. Masukkan soal terlebih dahulu sebelum meluncurkan soal ujian (Anda tetap bisa mem-publish Pendaftaran ke Katalog Publik lebih dulu).',
+        );
       }
       if (notReadyCount > 0) {
         throw new BadRequestException(
-          `Masih ada ${notReadyCount} soal di Tryout ini yang belum lolos QC (belum berstatus Siap / READY). Selesaikan QC semua soal di tabel Tryout sebelum mem-publish paket.`,
+          `Masih ada ${notReadyCount} soal di Tryout ini yang belum lolos QC (belum berstatus Siap / READY). Selesaikan QC semua soal sebelum meluncurkan soal ujian.`,
         );
       }
       // Remove any sandbox QA test attempts so the released tryout starts with clean leaderboard/counts.
@@ -3277,10 +3831,18 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           WHERE "id" IN (${Prisma.join(sandboxAttemptIds)})
         `);
       }
+      if (existing.curationStatus !== 'PUBLISHED') {
+        updateReleaseDate = true;
+      }
       nextCurationStatus = 'PUBLISHED';
+      nextQuestionsReleased = true;
+      updateQuestionsReleasedAt = true;
       revisionNotesUpdate = null;
+    } else if (action === 'UNRELEASE_QUESTIONS') {
+      nextQuestionsReleased = false;
     } else if (action === 'UNPUBLISH') {
       nextCurationStatus = 'DRAFT';
+      nextQuestionsReleased = false;
     } else {
       throw new BadRequestException('Aksi workflow tryout tidak dikenali.');
     }
@@ -3289,6 +3851,20 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       UPDATE public."TryOut"
       SET
         "curation_status" = ${nextCurationStatus},
+        "questions_released" = ${nextQuestionsReleased},
+        "questions_released_at" = CASE
+          WHEN ${updateQuestionsReleasedAt} THEN CURRENT_TIMESTAMP
+          WHEN ${!nextQuestionsReleased} THEN NULL
+          ELSE "questions_released_at"
+        END,
+        "releaseDate" = CASE
+          WHEN ${updateReleaseDate} THEN CURRENT_TIMESTAMP
+          ELSE "releaseDate"
+        END,
+        "isPublic" = CASE
+          WHEN ${nextCurationStatus === 'PUBLISHED'} THEN true
+          ELSE "isPublic"
+        END,
         "revision_notes" = CASE WHEN ${revisionNotesUpdate !== undefined} THEN ${revisionNotesUpdate ?? null} ELSE "revision_notes" END,
         "reviewed_by" = ${reviewerLabel},
         "reviewed_at" = CURRENT_TIMESTAMP
@@ -3297,6 +3873,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
         "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
         COALESCE("curation_status", 'DRAFT') AS "curationStatus",
+        COALESCE("questions_released", false) AS "questionsReleased",
+        "questions_released_at" AS "questionsReleasedAt",
+        COALESCE("break_seconds", 60)::int AS "breakSeconds",
         "revision_notes" AS "revisionNotes",
         "reviewed_by" AS "reviewedBy",
         "reviewed_at" AS "reviewedAt",
@@ -3308,13 +3887,26 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return updated ? { ...updated, questionCount } : null;
   }
 
-  /** Updates durationMinutes for each subtest of a tryout (custom per subtest or reset to official SNBT preset). */
+  /** Updates durationMinutes, targetQuestionCount per subtest, and breakSeconds between subtests for a tryout. */
   async updateTryoutSubtests(
     tryoutId: string,
-    subtests: Array<{ code?: string; id?: string; durationMinutes: number }>,
+    subtests: Array<{ code?: string; id?: string; durationMinutes: number; targetQuestionCount?: number }>,
+    breakSeconds?: number,
   ) {
     await this.ensureLifecycleSchema();
     const subtestMap = await this.ensureTryoutSubtests(tryoutId);
+
+    if (breakSeconds !== undefined) {
+      const cleanBreak = Math.round(Number(breakSeconds));
+      if (!Number.isFinite(cleanBreak) || cleanBreak < 0 || cleanBreak > 1800) {
+        throw new BadRequestException('Jeda antar subtes harus antara 0 sampai 1800 detik (30 menit).');
+      }
+      await this.query(Prisma.sql`
+        UPDATE public."TryOut"
+        SET "break_seconds" = ${cleanBreak}
+        WHERE "id" = ${tryoutId}
+      `);
+    }
 
     for (const item of subtests || []) {
       const duration = Math.round(Number(item.durationMinutes));
@@ -3322,49 +3914,66 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         throw new BadRequestException('Durasi tiap subtes harus antara 1 sampai 180 menit.');
       }
 
-      if (item.id) {
+      const targetCount =
+        item.targetQuestionCount !== undefined ? Math.round(Number(item.targetQuestionCount)) : undefined;
+      if (targetCount !== undefined && (!Number.isFinite(targetCount) || targetCount < 1 || targetCount > 200)) {
+        throw new BadRequestException('Target jumlah soal tiap subtes harus antara 1 sampai 200 butir.');
+      }
+
+      const targetSubId = item.id
+        ? item.id
+        : item.code
+        ? subtestMap.get(this.mapQuestionSubtestToCode(item.code))
+        : undefined;
+
+      if (targetSubId) {
         await this.query(Prisma.sql`
           UPDATE public."Subtest"
-          SET "duration_minutes" = ${duration}
-          WHERE "id" = ${item.id} AND "try_out_id" = ${tryoutId}
+          SET
+            "duration_minutes" = ${duration},
+            "target_question_count" = COALESCE(${targetCount ?? null}, "target_question_count")
+          WHERE "id" = ${targetSubId} AND "try_out_id" = ${tryoutId}
         `);
-      } else if (item.code) {
-        const mappedCode = this.mapQuestionSubtestToCode(item.code);
-        const subId = subtestMap.get(mappedCode);
-        if (subId) {
-          await this.query(Prisma.sql`
-            UPDATE public."Subtest"
-            SET "duration_minutes" = ${duration}
-            WHERE "id" = ${subId}
-          `);
-        }
       }
     }
+
+    const tryoutRows = await this.query<Array<{ breakSeconds: number }>>(Prisma.sql`
+      SELECT COALESCE("break_seconds", 60)::int AS "breakSeconds"
+      FROM public."TryOut"
+      WHERE "id" = ${tryoutId}
+      LIMIT 1
+    `);
 
     const updatedSubtests = await this.query<Array<{
       id: string;
       name: string;
       durationMinutes: number;
+      targetQuestionCount: number;
       order: number;
       questionCount: number;
+      readyCount: number;
     }>>(Prisma.sql`
       SELECT
         sub."id",
         sub."name"::text AS "name",
         sub."duration_minutes" AS "durationMinutes",
+        COALESCE(sub."target_question_count", 20)::int AS "targetQuestionCount",
         sub."order",
-        COUNT(DISTINCT q."id")::int AS "questionCount"
+        COUNT(DISTINCT q."id")::int AS "questionCount",
+        COUNT(DISTINCT CASE WHEN COALESCE(q."status", 'DRAFT') = 'READY' THEN q."id" END)::int AS "readyCount"
       FROM public."Subtest" sub
       LEFT JOIN public."Question" q ON q."subtest_id" = sub."id"
       WHERE sub."try_out_id" = ${tryoutId}
-      GROUP BY sub."id", sub."name", sub."duration_minutes", sub."order"
+      GROUP BY sub."id", sub."name", sub."duration_minutes", sub."target_question_count", sub."order"
       ORDER BY sub."order" ASC
     `);
 
     this.invalidateOverview();
     return {
       tryoutId,
+      breakSeconds: Number(tryoutRows[0]?.breakSeconds ?? 60),
       totalDurationMinutes: updatedSubtests.reduce((acc, s) => acc + (Number(s.durationMinutes) || 0), 0),
+      totalTargetQuestions: updatedSubtests.reduce((acc, s) => acc + (Number(s.targetQuestionCount) || 20), 0),
       subtests: updatedSubtests,
     };
   }

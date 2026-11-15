@@ -4,24 +4,26 @@ export class CreateTryoutControlDto {
   @IsString() @MinLength(2) title!: string;
   @IsString() @IsOptional() description?: string;
   @IsInt() @Min(0) solutionPrice!: number;
-  @IsIn(['SNBT', 'MANDIRI']) batch!: 'SNBT' | 'MANDIRI';
-  @IsDateString() releaseDate!: string;
+  @IsIn(['SNBT', 'SNBT_2027', 'MANDIRI']) @IsOptional() batch?: 'SNBT' | 'SNBT_2027' | 'MANDIRI';
+  @IsDateString() @IsOptional() releaseDate?: string;
   @IsDateString() scheduledStart!: string;
   @IsDateString() scheduledEnd!: string;
   @IsBoolean() @IsOptional() isPublic?: boolean;
   @IsString() @IsOptional() referralCode?: string;
+  @IsInt() @Min(0) @Max(1800) @IsOptional() breakSeconds?: number;
 }
 
 export class UpdateTryoutControlDto {
   @IsString() @MinLength(2) @IsOptional() title?: string;
   @IsString() @IsOptional() description?: string | null;
   @IsInt() @Min(0) @IsOptional() solutionPrice?: number;
-  @IsIn(['SNBT', 'MANDIRI']) @IsOptional() batch?: 'SNBT' | 'MANDIRI';
+  @IsIn(['SNBT', 'SNBT_2027', 'MANDIRI']) @IsOptional() batch?: 'SNBT' | 'SNBT_2027' | 'MANDIRI';
   @IsDateString() @IsOptional() releaseDate?: string;
   @IsDateString() @IsOptional() scheduledStart?: string;
   @IsDateString() @IsOptional() scheduledEnd?: string;
   @IsBoolean() @IsOptional() isPublic?: boolean;
   @IsString() @IsOptional() referralCode?: string | null;
+  @IsInt() @Min(0) @Max(1800) @IsOptional() breakSeconds?: number;
 }
 
 export class UpdateManagedUserDto {
@@ -270,7 +272,12 @@ export class BulkQuestionStatusDto {
 export class AssignPracticeQuestionsDto {
   @IsArray()
   @IsString({ each: true })
-  questionIds!: string[];
+  @IsOptional()
+  questionIds?: string[];
+
+  @IsString()
+  @IsOptional()
+  batch?: string;
 }
 
 export class AssignTryoutQuestionsDto {
@@ -316,8 +323,25 @@ export class CreateSandboxPreviewDto {
 }
 
 export class ReviewTryoutControlDto {
-  @IsIn(['SUBMIT_QC', 'APPROVE', 'REQUEST_REVISION', 'RESUBMIT_QC', 'UNPUBLISH'])
-  action!: 'SUBMIT_QC' | 'APPROVE' | 'REQUEST_REVISION' | 'RESUBMIT_QC' | 'UNPUBLISH';
+  @IsIn([
+    'SUBMIT_QC',
+    'APPROVE',
+    'PUBLISH_CATALOG',
+    'RELEASE_QUESTIONS',
+    'UNRELEASE_QUESTIONS',
+    'REQUEST_REVISION',
+    'RESUBMIT_QC',
+    'UNPUBLISH',
+  ])
+  action!:
+    | 'SUBMIT_QC'
+    | 'APPROVE'
+    | 'PUBLISH_CATALOG'
+    | 'RELEASE_QUESTIONS'
+    | 'UNRELEASE_QUESTIONS'
+    | 'REQUEST_REVISION'
+    | 'RESUBMIT_QC'
+    | 'UNPUBLISH';
 
   @IsString() @IsOptional() revisionNotes?: string;
 }
@@ -328,5 +352,8 @@ export class UpdateTryoutSubtestsDto {
     code?: string;
     id?: string;
     durationMinutes: number;
+    targetQuestionCount?: number;
   }>;
+
+  @IsInt() @Min(0) @Max(1800) @IsOptional() breakSeconds?: number;
 }
