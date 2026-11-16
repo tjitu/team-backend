@@ -8,7 +8,6 @@ export type TryoutInput = {
   description?: string | null;
   solutionPrice?: number;
   batch?: 'SNBT' | 'SNBT_2027' | 'MANDIRI';
-  releaseDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
   isPublic?: boolean;
@@ -23,7 +22,13 @@ export type PackageInput = {
   isActive?: boolean;
 };
 
-export type ManagedUserInput = { role?: 'USER' | 'ADMIN'; target?: string | null; isBanned?: boolean; isSandbox?: boolean };
+export type ManagedUserInput = {
+  role?: 'USER' | 'ADMIN';
+  target?: string | null;
+  isBanned?: boolean;
+  isSandbox?: boolean;
+  isPremium?: boolean;
+};
 export type HiringApplicationInput = { status?: 'SUBMITTED' | 'UNDER_REVIEW' | 'INTERVIEW' | 'ACCEPTED' | 'REJECTED'; adminNotes?: string };
 export type DiscountInput = {
   name: string;
@@ -576,7 +581,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       description: string | null;
       solutionPrice: number;
       batch: string;
-      releaseDate: Date;
       scheduledStart: Date | null;
       scheduledEnd: Date | null;
       status: string;
@@ -584,7 +588,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }>>(Prisma.sql`
       SELECT
         "id", "code", "title", "description", "solutionPrice",
-        "batch"::text AS "batch", "releaseDate", "scheduledStart", "scheduledEnd",
+        "batch"::text AS "batch", "scheduledStart", "scheduledEnd",
         "status"::text AS "status", "isPublic"
       FROM public."TryOut"
       ORDER BY "scheduledStart" DESC NULLS LAST, "createdAt" DESC
@@ -917,12 +921,27 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     };
   }
 
+  private computeTryoutLifecycleStatus(
+    curationStatus: string | null | undefined,
+    isPublic: boolean | null | undefined,
+    scheduledStart: Date | string | null | undefined,
+  ): 'DRAFT' | 'PUBLIC' | 'LIVE' {
+    const normalized = String(curationStatus || 'DRAFT').toUpperCase().trim();
+    if (normalized !== 'PUBLISHED' || !isPublic) {
+      return 'DRAFT';
+    }
+    if (scheduledStart && new Date(scheduledStart).getTime() > Date.now()) {
+      return 'PUBLIC';
+    }
+    return 'LIVE';
+  }
+
   async listTryouts() {
     await this.ensureLifecycleSchema();
-    const rows = await this.query(Prisma.sql`
+    const rows = await this.query<Array<Record<string, any>>>(Prisma.sql`
       SELECT
         t."id", t."code", t."title", t."description", t."solutionPrice", t."batch"::text AS "batch",
-        t."releaseDate", t."scheduledStart", t."scheduledEnd", t."status"::text AS "status",
+        t."scheduledStart", t."scheduledEnd", t."status"::text AS "status",
         COALESCE(t."curation_status", 'DRAFT') AS "curationStatus",
         (
           COALESCE(t."questions_released", false)
@@ -938,7 +957,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         COALESCE(qc."questionCount", 0)::int AS "questionCount",
         COALESCE(qc."readyQuestionCount", 0)::int AS "readyQuestionCount",
         COALESCE(sd."totalDurationMinutes", 195)::int AS "totalDurationMinutes",
-        COALESCE(sd."totalTargetQuestions", 160)::int AS "totalTargetQuestions"
+        COALESCE(sd."totalTargetQuestions", 160)::int AS "totalTargetQuestions",
+        COALESCE(ps."registrantCount", 0)::int AS "registrantCount",
+        COALESCE(ps."notStartedCount", 0)::int AS "notStartedCount",
+        COALESCE(ps."inProgressCount", 0)::int AS "inProgressCount",
+        COALESCE(ps."finishedCount", 0)::int AS "finishedCount"
       FROM public."TryOut" t
       LEFT JOIN (
         SELECT
@@ -966,10 +989,36 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         ) dedup
         GROUP BY dedup."try_out_id"
       ) sd ON sd."tid" = t."id"
+      LEFT JOIN (
+        SELECT
+          latest."try_out_id" AS "tid",
+          COUNT(*)::int AS "registrantCount",
+          COUNT(*) FILTER (WHERE latest."status"::text = 'NOT_STARTED')::int AS "notStartedCount",
+          COUNT(*) FILTER (WHERE latest."status"::text = 'IN_PROGRESS')::int AS "inProgressCount",
+          COUNT(*) FILTER (WHERE latest."status"::text = 'FINISHED')::int AS "finishedCount"
+        FROM (
+          SELECT DISTINCT ON (att."try_out_id", att."userId")
+            att."try_out_id",
+            att."userId",
+            att."status"
+          FROM public."TryOutAttempt" att
+          JOIN public."user" u ON u."id" = att."userId"
+          WHERE COALESCE(u."isSandbox", false) = false
+          ORDER BY att."try_out_id", att."userId", att."started_at" DESC NULLS LAST, att."id" DESC
+        ) latest
+        GROUP BY latest."try_out_id"
+      ) ps ON ps."tid" = t."id"
       ORDER BY t."createdAt" DESC
       LIMIT 200
     `);
-    return rows;
+    return rows.map((row) => ({
+      ...row,
+      lifecycleStatus: this.computeTryoutLifecycleStatus(
+        row.curationStatus,
+        row.isPublic,
+        row.scheduledStart,
+      ),
+    }));
   }
 
   async createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput) {
@@ -977,7 +1026,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const now = Date.now();
     const start = new Date(input.scheduledStart);
     const end = new Date(input.scheduledEnd);
-    const releaseDate = input.releaseDate ? new Date(input.releaseDate) : new Date();
     const batch = input.batch || 'SNBT_2027';
     const breakSeconds = input.breakSeconds !== undefined ? Math.max(0, Math.min(1800, Math.round(Number(input.breakSeconds)))) : 60;
     const status = now > end.getTime() ? 'FINISHED' : now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
@@ -989,13 +1037,13 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       )
       VALUES (
         ${randomUUID()}, ${input.title}, ${input.description ?? null}, ${input.solutionPrice},
-        CAST(${batch} AS public."TryoutBatch"), ${releaseDate},
+        CAST(${batch} AS public."TryoutBatch"), CURRENT_TIMESTAMP,
         ${start}, ${end}, CAST(${status} AS public."TryoutStatus"), 'DRAFT',
         false, ${breakSeconds}, ${input.isPublic ?? true}, ${input.referralCode || null}
       )
       RETURNING
         "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
-        "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
+        "scheduledStart", "scheduledEnd", "status"::text AS "status",
         COALESCE("curation_status", 'DRAFT') AS "curationStatus",
         COALESCE("questions_released", false) AS "questionsReleased",
         "questions_released_at" AS "questionsReleasedAt",
@@ -1011,10 +1059,15 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return created
       ? {
           ...created,
+          lifecycleStatus: 'DRAFT' as const,
           questionCount: 0,
           readyQuestionCount: 0,
           totalDurationMinutes: 195,
           totalTargetQuestions: 160,
+          registrantCount: 0,
+          notStartedCount: 0,
+          inProgressCount: 0,
+          finishedCount: 0,
         }
       : null;
   }
@@ -1036,13 +1089,12 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const status = end && now > end.getTime() ? 'FINISHED' : start && end && now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
     const breakSeconds =
       input.breakSeconds !== undefined ? Math.max(0, Math.min(1800, Math.round(Number(input.breakSeconds)))) : null;
-    const rows = await this.query(Prisma.sql`
+    const rows = await this.query<Array<Record<string, any>>>(Prisma.sql`
       UPDATE public."TryOut" SET
         "title" = COALESCE(${input.title ?? null}, "title"),
         "description" = CASE WHEN ${input.description !== undefined} THEN ${input.description ?? null} ELSE "description" END,
         "solutionPrice" = COALESCE(${input.solutionPrice ?? null}, "solutionPrice"),
         "batch" = CASE WHEN ${input.batch !== undefined} THEN CAST(${input.batch ?? 'SNBT_2027'} AS public."TryoutBatch") ELSE "batch" END,
-        "releaseDate" = COALESCE(${input.releaseDate ? new Date(input.releaseDate) : null}, "releaseDate"),
         "scheduledStart" = CASE WHEN ${input.scheduledStart !== undefined} THEN ${start} ELSE "scheduledStart" END,
         "scheduledEnd" = CASE WHEN ${input.scheduledEnd !== undefined} THEN ${end} ELSE "scheduledEnd" END,
         "isPublic" = COALESCE(${input.isPublic ?? null}, "isPublic"),
@@ -1052,7 +1104,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE "id" = ${id}
       RETURNING
         "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
-        "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
+        "scheduledStart", "scheduledEnd", "status"::text AS "status",
         COALESCE("curation_status", 'DRAFT') AS "curationStatus",
         COALESCE("questions_released", false) AS "questionsReleased",
         "questions_released_at" AS "questionsReleasedAt",
@@ -1061,7 +1113,17 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "isPublic", "referralCode", "createdAt"
     `);
     this.invalidateOverview();
-    return Array.isArray(rows) ? rows[0] ?? null : null;
+    const updated = Array.isArray(rows) ? rows[0] ?? null : null;
+    return updated
+      ? {
+          ...updated,
+          lifecycleStatus: this.computeTryoutLifecycleStatus(
+            updated.curationStatus,
+            updated.isPublic,
+            updated.scheduledStart,
+          ),
+        }
+      : null;
   }
 
   async deleteTryout(id: string) {
@@ -1515,7 +1577,13 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       SELECT "id", "name", "email", "image", "role"::text AS "role", "target", "tokenBalance", "currentStreak", "createdAt",
              COALESCE("isBanned", false) AS "isBanned",
              COALESCE("emailVerified", false) AS "emailVerified",
-             COALESCE("isSandbox", false) AS "isSandbox"
+             COALESCE("isSandbox", false) AS "isSandbox",
+             COALESCE("isPremium", false) AS "isPremium",
+             "premiumExpiresAt",
+             (
+               COALESCE("isPremium", false) = true
+               AND ("premiumExpiresAt" IS NULL OR "premiumExpiresAt" > CURRENT_TIMESTAMP)
+             ) AS "isPremiumActive"
       FROM public."user"
       WHERE ${search.trim() === ''} OR "name" ILIKE ${pattern} OR "email" ILIKE ${pattern}
       ORDER BY "createdAt" DESC
@@ -1531,11 +1599,19 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "target" = CASE WHEN ${input.target !== undefined} THEN ${input.target ?? null} ELSE "target" END,
         "isBanned" = CASE WHEN ${input.isBanned !== undefined} THEN ${Boolean(input.isBanned)} ELSE "isBanned" END,
         "isSandbox" = CASE WHEN ${input.isSandbox !== undefined} THEN ${Boolean(input.isSandbox)} ELSE "isSandbox" END,
+        "isPremium" = CASE WHEN ${input.isPremium !== undefined} THEN ${Boolean(input.isPremium)} ELSE "isPremium" END,
+        "premiumExpiresAt" = CASE WHEN ${input.isPremium !== undefined} THEN NULL ELSE "premiumExpiresAt" END,
         "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${id}
       RETURNING "id", "name", "email", "image", "role"::text AS "role", "target", "tokenBalance", "currentStreak", "createdAt",
                 COALESCE("isBanned", false) AS "isBanned",
-                COALESCE("isSandbox", false) AS "isSandbox"
+                COALESCE("isSandbox", false) AS "isSandbox",
+                COALESCE("isPremium", false) AS "isPremium",
+                "premiumExpiresAt",
+                (
+                  COALESCE("isPremium", false) = true
+                  AND ("premiumExpiresAt" IS NULL OR "premiumExpiresAt" > CURRENT_TIMESTAMP)
+                ) AS "isPremiumActive"
     `);
     this.invalidateOverview();
     return Array.isArray(rows) ? rows[0] ?? null : null;
@@ -3261,9 +3337,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   /** Returns assigned questions, subtest stock summary, tryout picker pool, and batch summaries for a tryout. */
   async getTryoutWorkspace(tryoutId: string) {
     await this.ensureLifecycleSchema();
-    const tryoutRows = await this.query<Array<Record<string, unknown> & { id: string }>>(Prisma.sql`
+    const tryoutRows = await this.query<Array<Record<string, any> & { id: string }>>(Prisma.sql`
       SELECT "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
-             "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
+             "scheduledStart", "scheduledEnd", "status"::text AS "status",
              COALESCE("curation_status", 'DRAFT') AS "curationStatus",
              COALESCE("questions_released", false) AS "questionsReleased",
              "questions_released_at" AS "questionsReleasedAt",
@@ -3280,6 +3356,35 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (!tryout) {
       throw new NotFoundException('Tryout tidak ditemukan.');
     }
+
+    const participantStatsRows = await this.query<Array<{
+      registrantCount: number;
+      notStartedCount: number;
+      inProgressCount: number;
+      finishedCount: number;
+    }>>(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "registrantCount",
+        COUNT(*) FILTER (WHERE latest."status"::text = 'NOT_STARTED')::int AS "notStartedCount",
+        COUNT(*) FILTER (WHERE latest."status"::text = 'IN_PROGRESS')::int AS "inProgressCount",
+        COUNT(*) FILTER (WHERE latest."status"::text = 'FINISHED')::int AS "finishedCount"
+      FROM (
+        SELECT DISTINCT ON (att."userId")
+          att."userId",
+          att."status"
+        FROM public."TryOutAttempt" att
+        JOIN public."user" u ON u."id" = att."userId"
+        WHERE att."try_out_id" = ${tryoutId}
+          AND COALESCE(u."isSandbox", false) = false
+        ORDER BY att."userId", att."started_at" DESC NULLS LAST, att."id" DESC
+      ) latest
+    `);
+    const participantStats = participantStatsRows[0] ?? {
+      registrantCount: 0,
+      notStartedCount: 0,
+      inProgressCount: 0,
+      finishedCount: 0,
+    };
 
     const subtestMap = await this.ensureTryoutSubtests(tryoutId);
 
@@ -3525,6 +3630,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return {
       tryout: {
         ...tryout,
+        lifecycleStatus: this.computeTryoutLifecycleStatus(
+          tryout.curationStatus,
+          tryout.isPublic,
+          tryout.scheduledStart,
+        ),
         questionsReleased: Boolean(
           tryout.questionsReleased &&
             assignedQuestions.length > 0 &&
@@ -3534,6 +3644,10 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         readyQuestionCount,
         totalDurationMinutes,
         totalTargetQuestions,
+        registrantCount: Number(participantStats.registrantCount) || 0,
+        notStartedCount: Number(participantStats.notStartedCount) || 0,
+        inProgressCount: Number(participantStats.inProgressCount) || 0,
+        finishedCount: Number(participantStats.finishedCount) || 0,
       },
       subtests,
       assignedQuestions,
@@ -3779,7 +3893,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const action = String(input.action || '').toUpperCase().trim();
     let nextCurationStatus = existing.curationStatus;
     let nextQuestionsReleased = existing.questionsReleased;
-    let updateReleaseDate = false;
     let updateQuestionsReleasedAt = false;
     let revisionNotesUpdate: string | null | undefined = undefined;
 
@@ -3797,12 +3910,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       nextQuestionsReleased = false;
       revisionNotesUpdate = notes;
     } else if (action === 'PUBLISH_CATALOG') {
-      // Stage 1: Open registration in public catalog immediately (questions do not need to be ready yet).
+      // Open registration in public catalog immediately (questions do not need to be ready yet).
       nextCurationStatus = 'PUBLISHED';
-      updateReleaseDate = true;
       revisionNotesUpdate = null;
     } else if (action === 'RELEASE_QUESTIONS' || action === 'APPROVE') {
-      // Stage 2: Launch exam questions (requires >0 questions and 100% READY).
+      // Launch exam questions (requires >0 questions and 100% READY).
       if (questionCount <= 0) {
         throw new BadRequestException(
           'Belum ada soal di Tryout ini. Masukkan soal terlebih dahulu sebelum meluncurkan soal ujian (Anda tetap bisa mem-publish Pendaftaran ke Katalog Publik lebih dulu).',
@@ -3831,9 +3943,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           WHERE "id" IN (${Prisma.join(sandboxAttemptIds)})
         `);
       }
-      if (existing.curationStatus !== 'PUBLISHED') {
-        updateReleaseDate = true;
-      }
       nextCurationStatus = 'PUBLISHED';
       nextQuestionsReleased = true;
       updateQuestionsReleasedAt = true;
@@ -3847,7 +3956,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       throw new BadRequestException('Aksi workflow tryout tidak dikenali.');
     }
 
-    const updatedRows = await this.query<Array<Record<string, unknown>>>(Prisma.sql`
+    const updatedRows = await this.query<Array<Record<string, any>>>(Prisma.sql`
       UPDATE public."TryOut"
       SET
         "curation_status" = ${nextCurationStatus},
@@ -3856,10 +3965,6 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           WHEN ${updateQuestionsReleasedAt} THEN CURRENT_TIMESTAMP
           WHEN ${!nextQuestionsReleased} THEN NULL
           ELSE "questions_released_at"
-        END,
-        "releaseDate" = CASE
-          WHEN ${updateReleaseDate} THEN CURRENT_TIMESTAMP
-          ELSE "releaseDate"
         END,
         "isPublic" = CASE
           WHEN ${nextCurationStatus === 'PUBLISHED'} THEN true
@@ -3871,7 +3976,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE "id" = ${tryoutId}
       RETURNING
         "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
-        "releaseDate", "scheduledStart", "scheduledEnd", "status"::text AS "status",
+        "scheduledStart", "scheduledEnd", "status"::text AS "status",
         COALESCE("curation_status", 'DRAFT') AS "curationStatus",
         COALESCE("questions_released", false) AS "questionsReleased",
         "questions_released_at" AS "questionsReleasedAt",
@@ -3884,7 +3989,17 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     this.invalidateOverview();
     const updated = updatedRows[0] ?? null;
-    return updated ? { ...updated, questionCount } : null;
+    return updated
+      ? {
+          ...updated,
+          lifecycleStatus: this.computeTryoutLifecycleStatus(
+            updated.curationStatus,
+            updated.isPublic,
+            updated.scheduledStart,
+          ),
+          questionCount,
+        }
+      : null;
   }
 
   /** Updates durationMinutes, targetQuestionCount per subtest, and breakSeconds between subtests for a tryout. */

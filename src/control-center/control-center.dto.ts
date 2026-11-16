@@ -5,7 +5,6 @@ export class CreateTryoutControlDto {
   @IsString() @IsOptional() description?: string;
   @IsInt() @Min(0) solutionPrice!: number;
   @IsIn(['SNBT', 'SNBT_2027', 'MANDIRI']) @IsOptional() batch?: 'SNBT' | 'SNBT_2027' | 'MANDIRI';
-  @IsDateString() @IsOptional() releaseDate?: string;
   @IsDateString() scheduledStart!: string;
   @IsDateString() scheduledEnd!: string;
   @IsBoolean() @IsOptional() isPublic?: boolean;
@@ -18,7 +17,6 @@ export class UpdateTryoutControlDto {
   @IsString() @IsOptional() description?: string | null;
   @IsInt() @Min(0) @IsOptional() solutionPrice?: number;
   @IsIn(['SNBT', 'SNBT_2027', 'MANDIRI']) @IsOptional() batch?: 'SNBT' | 'SNBT_2027' | 'MANDIRI';
-  @IsDateString() @IsOptional() releaseDate?: string;
   @IsDateString() @IsOptional() scheduledStart?: string;
   @IsDateString() @IsOptional() scheduledEnd?: string;
   @IsBoolean() @IsOptional() isPublic?: boolean;
@@ -31,6 +29,7 @@ export class UpdateManagedUserDto {
   @IsString() @MinLength(1) @MaxLength(100) @IsOptional() target?: string | null;
   @IsBoolean() @IsOptional() isBanned?: boolean;
   @IsBoolean() @IsOptional() isSandbox?: boolean;
+  @IsBoolean() @IsOptional() isPremium?: boolean;
 }
 
 export class UpdateHiringApplicationDto {
