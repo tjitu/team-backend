@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException, OnApplicationBootst
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { VercelAnalyticsService } from './vercel-analytics.service';
+import { deleteTryoutRecords } from './tryout-deletion';
 
 export type TryoutInput = {
   title?: string;
@@ -128,7 +129,7 @@ export interface JituManagementDataSource {
   listTryouts(): Promise<unknown>;
   createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
   updateTryout(id: string, input: TryoutInput): Promise<unknown | null>;
-  deleteTryout(id: string): Promise<unknown | null>;
+  deleteTryout(id: string, force?: boolean): Promise<unknown | null>;
   listPackages(): Promise<unknown>;
   createPackage(input: Required<Pick<PackageInput, 'name' | 'tokenAmount' | 'price'>> & PackageInput): Promise<unknown>;
   updatePackage(id: string, input: PackageInput): Promise<unknown | null>;
@@ -1126,40 +1127,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       : null;
   }
 
-  async deleteTryout(id: string) {
-    const existingRows = await this.query<Array<{ id: string }>>(Prisma.sql`
-      SELECT "id" FROM public."TryOut" WHERE "id" = ${id} LIMIT 1
-    `);
-    if (!existingRows[0]) return null;
-
-    const dependencyRows = await this.query<Array<{
-      hasAttempts: boolean;
-      hasUnlockedSolutions: boolean;
-      hasAssignedQuestions: boolean;
-    }>>(Prisma.sql`
-      SELECT
-        EXISTS (SELECT 1 FROM public."TryOutAttempt" WHERE "try_out_id" = ${id}) AS "hasAttempts",
-        EXISTS (SELECT 1 FROM public."UnlockedSolution" WHERE "tryOutId" = ${id}) AS "hasUnlockedSolutions",
-        EXISTS (
-          SELECT 1
-          FROM public."Question" q
-          LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
-          WHERE q."tryoutId" = ${id} OR sub."try_out_id" = ${id}
-        ) AS "hasAssignedQuestions"
-    `);
-    const dependencies = dependencyRows[0];
-    if (dependencies?.hasAttempts || dependencies?.hasUnlockedSolutions || dependencies?.hasAssignedQuestions) {
-      throw new BadRequestException('This tryout has assigned questions or student history and cannot be deleted. Unassign its questions first or set it to private.');
-    }
-
-    await this.query(Prisma.sql`DELETE FROM public."Subtest" WHERE "try_out_id" = ${id}`);
-
-    const rows = await this.query<Array<{ id: string; title: string }>>(Prisma.sql`
-      DELETE FROM public."TryOut" WHERE "id" = ${id} RETURNING "id", "title"
-    `);
-    if (!rows[0]) return null;
-    this.invalidateOverview();
-    return rows[0];
+  async deleteTryout(id: string, force = false) {
+    await this.ensureLifecycleSchema();
+    const result = await deleteTryoutRecords(this.database(), id, force);
+    if (result) this.invalidateOverview();
+    return result;
   }
 
   async listPackages() {

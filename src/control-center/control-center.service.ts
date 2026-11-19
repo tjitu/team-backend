@@ -70,9 +70,9 @@ export class ControlCenterService {
     return result;
   }
 
-  async deleteTryout(userId: string, id: string) {
+  async deleteTryout(userId: string, id: string, force = false) {
     await this.requireAdministrator(userId);
-    const result = await this.jituManagement.deleteTryout(id);
+    const result = await this.jituManagement.deleteTryout(id, force);
     if (!result) throw new NotFoundException('Tryout not found.');
     this.jituManagement.invalidateOverview?.();
     return result;
