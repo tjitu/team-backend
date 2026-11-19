@@ -1,3 +1,4 @@
+import { validateAuthoredOptions } from './authored-answer-options';
 import { BadRequestException, Injectable, NotFoundException, OnApplicationBootstrap, OnModuleDestroy, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -2449,6 +2450,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const difficulty = input.difficulty || 'MEDIUM';
     const rawType = input.type || 'PILIHAN_GANDA';
     const type = (rawType === 'SHORT_ANSWER' || rawType === 'ISIAN_SINGKAT') ? 'ISIAN_SINGKAT' : 'PILIHAN_GANDA';
+    if (type === 'PILIHAN_GANDA' && target !== 'SOAL_ASLI' && rawType !== 'COMPLEX_MULTIPLE_CHOICE') {
+      validateAuthoredOptions(input.options);
+    }
     const tryoutId = target === 'FOR_TRYOUT' ? (input.tryoutId || null) : null;
     const subtestId = tryoutId
       ? (await this.ensureTryoutSubtests(tryoutId)).get(this.mapQuestionSubtestToCode(input.subtest)) ?? null
@@ -2462,7 +2466,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     await this.assertBatchTargetCompatibility(batch, target, tryoutId);
 
-    await this.query(Prisma.sql`
+    const writes: Prisma.Sql[] = [];
+    writes.push(Prisma.sql`
       INSERT INTO public."Question" (
         "id", "subtest", "topic_id", "subtopic_id", "pattern", "batch", "difficulty", "type", "target", "status",
         "revision_notes", "reviewed_by", "reviewed_at",
@@ -2481,7 +2486,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (type !== 'ISIAN_SINGKAT' && Array.isArray(input.options) && input.options.length > 0) {
       for (const opt of input.options) {
         if (!opt.content && !opt.isCorrect) continue;
-        await this.query(Prisma.sql`
+        writes.push(Prisma.sql`
           INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
           VALUES (${randomUUID()}, ${questionId}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
         `);
@@ -2490,7 +2495,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
     if (stepsJson || input.quickTrick || input.staticExplanation || input.keyFormula) {
-      await this.query(Prisma.sql`
+      writes.push(Prisma.sql`
         INSERT INTO public."QuestionSolution" (
           "id", "questionId", "steps", "staticContent", "quickTrick", "keyFormula", "createdAt", "updatedAt"
         ) VALUES (
@@ -2501,13 +2506,15 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }
 
     if (status === 'READY' && target === 'FOR_PRACTICE') {
-      await this.query(Prisma.sql`
+      writes.push(Prisma.sql`
         INSERT INTO public."PracticeAssignment" ("id", "question_id", "assigned_by", "assigned_at")
         VALUES (${randomUUID()}, ${questionId}, 'control_center', CURRENT_TIMESTAMP)
         ON CONFLICT ("question_id") DO NOTHING
       `);
     }
 
+    const database = this.database();
+    await database.$transaction(writes.map(statement => database.$executeRaw(statement)));
     const result = await this.listQuestions(questionId, '', '', '', true);
     return Array.isArray(result) ? result[0] : null;
   }
@@ -2515,6 +2522,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   async updateQuestion(id: string, input: any) {
     await this.ensureLifecycleSchema();
     const currentRows = await this.query<Array<{
+      type: string;
       subtest: string;
       batch: string | null;
       target: string;
@@ -2523,7 +2531,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       subtestId: string | null;
     }>>(Prisma.sql`
       SELECT
-        q."subtest",
+        q."type"::text AS "type", q."subtest",
         q."batch",
         COALESCE(q."target", 'DRAFT') AS "target",
         COALESCE(q."status", 'DRAFT') AS "status",
@@ -2571,6 +2579,11 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const type = rawType ? ((rawType === 'SHORT_ANSWER' || rawType === 'ISIAN_SINGKAT') ? 'ISIAN_SINGKAT' : 'PILIHAN_GANDA') : undefined;
     const correctAnswer = input.correctAnswer !== undefined ? (input.correctAnswer !== null ? String(input.correctAnswer).trim() : null) : undefined;
     const effectiveTarget = target !== undefined ? target : currentQuestion.target;
+    const effectiveType = type ?? currentQuestion.type;
+    if ((input.options !== undefined || (type && type !== currentQuestion.type))
+      && effectiveType === 'PILIHAN_GANDA' && effectiveTarget !== 'SOAL_ASLI' && rawType !== 'COMPLEX_MULTIPLE_CHOICE') {
+      validateAuthoredOptions(input.options);
+    }
     const effectiveSubtest = input.subtest !== undefined ? input.subtest : currentQuestion.subtest;
     const requestedTryoutId = input.tryoutId !== undefined ? (input.tryoutId || null) : currentQuestion.tryoutId;
     const nextTryoutId = effectiveTarget === 'FOR_TRYOUT' ? requestedTryoutId : null;
@@ -2612,7 +2625,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     await this.assertBatchTargetCompatibility(effectiveBatch, effectiveTarget, nextTryoutId, id);
 
-    await this.query(Prisma.sql`
+    const writes: Prisma.Sql[] = [];
+    writes.push(Prisma.sql`
       UPDATE public."Question" SET
         "subtest" = COALESCE(${input.subtest ?? null}, "subtest"),
         "topic_id" = CASE WHEN ${topicId !== undefined} THEN ${topicId} ELSE "topic_id" END,
@@ -2637,15 +2651,15 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     `);
 
     if (nextTryoutId) {
-      await this.query(Prisma.sql`DELETE FROM public."PracticeAssignment" WHERE "question_id" = ${id}`);
+      writes.push(Prisma.sql`DELETE FROM public."PracticeAssignment" WHERE "question_id" = ${id}`);
     }
 
     if (Array.isArray(input.options)) {
-      await this.query(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
-      if (type !== 'ISIAN_SINGKAT') {
+      writes.push(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
+      if (effectiveType !== 'ISIAN_SINGKAT') {
         for (const opt of input.options) {
           if (!opt.content && !opt.isCorrect) continue;
-          await this.query(Prisma.sql`
+          writes.push(Prisma.sql`
             INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
             VALUES (${randomUUID()}, ${id}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
           `);
@@ -2655,7 +2669,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     if (input.solutionSteps !== undefined || input.quickTrick !== undefined || input.staticExplanation !== undefined || input.keyFormula !== undefined) {
       const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
-      await this.query(Prisma.sql`
+      writes.push(Prisma.sql`
         INSERT INTO public."QuestionSolution" ("id", "questionId", "steps", "staticContent", "quickTrick", "keyFormula", "createdAt", "updatedAt")
         VALUES (${randomUUID()}, ${id}, CAST(${stepsJson} AS jsonb), ${input.staticExplanation || null}, ${input.quickTrick || null}, ${input.keyFormula || null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT ("questionId") DO UPDATE SET
@@ -2670,17 +2684,33 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     // Keep PracticeAssignment synchronized with effective status/target
     const effectiveStatus = nextStatus !== undefined ? nextStatus : currentQuestion.status;
     if (effectiveTarget === 'FOR_PRACTICE' && effectiveStatus === 'READY') {
-      await this.query(Prisma.sql`
+      writes.push(Prisma.sql`
         INSERT INTO public."PracticeAssignment" ("id", "question_id", "assigned_by", "assigned_at")
         VALUES (${randomUUID()}, ${id}, 'control_center', CURRENT_TIMESTAMP)
         ON CONFLICT ("question_id") DO NOTHING
       `);
     } else {
-      await this.query(Prisma.sql`DELETE FROM public."PracticeAssignment" WHERE "question_id" = ${id}`);
+      writes.push(Prisma.sql`DELETE FROM public."PracticeAssignment" WHERE "question_id" = ${id}`);
     }
 
+    const database = this.database();
+    await database.$transaction(writes.map(statement => database.$executeRaw(statement)));
     const result = await this.listQuestions(id, '', '', '', true);
     return Array.isArray(result) ? result[0] : null;
+  }
+
+  private async checkOptionsForQc(ids: string[]) {
+    const invalid = await this.query<Array<{ id: string }>>(Prisma.sql`
+      SELECT q.id FROM public."Question" q
+      WHERE q.id IN (${Prisma.join(ids)}) AND q.type::text = 'PILIHAN_GANDA'
+        AND coalesce(q.target, 'DRAFT') <> 'SOAL_ASLI' AND NOT (
+         SELECT count(*) >= 2 AND count(*) FILTER (WHERE i.is_correct) = 1
+           AND count(DISTINCT nullif(trim(i.content), '')) = count(*)
+         FROM public."QuestionItem" i WHERE i.question_id = q.id
+       )
+      LIMIT 1
+    `);
+    if (invalid.length) throw new BadRequestException(`Periksa pilihan dan kunci jawaban soal ${invalid[0].id} sebelum QC.`);
   }
 
   async reviewQuestionWorkflow(id: string, input: { action: string; revisionNotes?: string; restoreStatus?: string }, reviewerLabel = 'Admin') {
@@ -2693,6 +2723,10 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (!existing) return null;
 
     const action = input.action;
+    if (['SUBMIT_QC', 'RESUBMIT_QC', 'APPROVE'].includes(action)
+      || (action === 'RESTORE' && ['READY', 'QC_SANDBOX'].includes(input.restoreStatus || 'READY'))) {
+      await this.checkOptionsForQc([id]);
+    }
     let nextStatus = existing.status;
     let nextTarget = existing.target;
     let revisionNotesUpdate: string | null | undefined = undefined;
@@ -2792,6 +2826,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (foundIds.length === 0) {
       throw new NotFoundException('Soal yang dipilih tidak ditemukan.');
     }
+
+    if (nextStatus === 'READY' || nextStatus === 'QC_SANDBOX') await this.checkOptionsForQc(foundIds);
 
     const trimmedNotes = input.revisionNotes !== undefined ? String(input.revisionNotes).trim() : undefined;
 
