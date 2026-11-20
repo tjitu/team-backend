@@ -39,3 +39,4 @@ team-backend/
 * **Audit Trail**: Every project, task, and comment change creates an `ActivityLog` entry in the same transaction.
 * **Optimistic Versioning**: Task mutations check current version to prevent race condition overwrites.
 * **Control Center Bridge**: Reads/coordinates Main DB tryout & question workflow metrics safely per `ECOSYSTEM_MAP.md`.
+* **Tryout Deletion**: `tryouts.controller.ts` validates the optional `DELETE /team/control-center/tryouts/:id?force=true` flag. Administrator-only force deletion uses `tryout-deletion.ts` in a serializable transaction to remove exam history and sandbox sessions, detach reusable questions by QC status, and delete the tryout/subtests. Default deletion still rejects dependencies.

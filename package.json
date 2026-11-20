@@ -9,6 +9,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "build": "nest build",
+    "test:tryout-deletion": "node --test test/tryout-deletion.test.cjs test/tryouts-controller.test.cjs",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",

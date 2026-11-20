@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { AssignPracticeQuestionsDto, AssignTryoutQuestionsDto, BulkQuestionStatusDto, CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSandboxPreviewDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateTryoutControlDto, CreateVoucherControlDto, ReviewQuestionControlDto, ReviewTryoutControlDto, UnassignTryoutQuestionsDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSoalAsliPackageDto, UpdateSoalAsliQuestionSolutionDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutControlDto, UpdateTryoutSubtestsDto, UpdateVoucherControlDto } from './control-center.dto';
+import { AssignPracticeQuestionsDto, AssignTryoutQuestionsDto, BulkQuestionStatusDto, CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSandboxPreviewDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateVoucherControlDto, ReviewQuestionControlDto, ReviewTryoutControlDto, UnassignTryoutQuestionsDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSoalAsliPackageDto, UpdateSoalAsliQuestionSolutionDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutSubtestsDto, UpdateVoucherControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -44,26 +44,6 @@ export class ControlCenterController {
     @Query('search') search?: string,
   ) {
     return this.controlCenter.listPayments(request.user.id, status, search);
-  }
-
-  @Get('tryouts')
-  getTryouts(@Req() request: AuthenticatedRequest) {
-    return this.controlCenter.listTryouts(request.user.id);
-  }
-
-  @Post('tryouts')
-  createTryout(@Req() request: AuthenticatedRequest, @Body() body: CreateTryoutControlDto) {
-    return this.controlCenter.createTryout(request.user.id, body);
-  }
-
-  @Patch('tryouts/:id')
-  updateTryout(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: UpdateTryoutControlDto) {
-    return this.controlCenter.updateTryout(request.user.id, id, body);
-  }
-
-  @Delete('tryouts/:id')
-  deleteTryout(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
-    return this.controlCenter.deleteTryout(request.user.id, id);
   }
 
   @Get('tryouts/:id/questions')
