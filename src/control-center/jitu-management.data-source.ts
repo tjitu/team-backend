@@ -246,6 +246,20 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (this.lifecycleSchemaReady || !this.prisma) return;
     if (this.lifecycleSchemaPromise) return this.lifecycleSchemaPromise;
     this.lifecycleSchemaPromise = (async () => {
+      // Persist completion across serverless instances: repeated DDL triggers costly
+      // PostgREST schema reloads even when the columns already exist.
+      const markerTable = await this.database().$queryRaw<Array<{ present: boolean }>>(Prisma.sql`
+        SELECT to_regclass('jitu_internal."SchemaMigration"') IS NOT NULL AS present
+      `);
+      if (markerTable[0]?.present) {
+        const marker = await this.database().$queryRaw<Array<{ present: boolean }>>(Prisma.sql`
+          SELECT EXISTS(SELECT 1 FROM jitu_internal."SchemaMigration" WHERE id = 'question-lifecycle-v1') AS present
+        `);
+        if (marker[0]?.present) {
+          this.lifecycleSchemaReady = true;
+          return;
+        }
+      }
       await this.database().$executeRawUnsafe(`
         ALTER TABLE public."Question"
           ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'DRAFT',
@@ -431,6 +445,17 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         CREATE UNIQUE INDEX IF NOT EXISTS "idx_subtest_tryout_name_unique"
         ON public."Subtest" ("try_out_id", "name")
       `).catch(() => undefined);
+      await this.database().$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS jitu_internal`);
+      await this.database().$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS jitu_internal."SchemaMigration" (
+          id TEXT PRIMARY KEY,
+          completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await this.database().$executeRawUnsafe(`
+        INSERT INTO jitu_internal."SchemaMigration" (id)
+        VALUES ('question-lifecycle-v1') ON CONFLICT (id) DO NOTHING
+      `);
       this.lifecycleSchemaReady = true;
     })().finally(() => {
       this.lifecycleSchemaPromise = null;

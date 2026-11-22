@@ -40,3 +40,5 @@ team-backend/
 * **Optimistic Versioning**: Task mutations check current version to prevent race condition overwrites.
 * **Control Center Bridge**: Reads/coordinates Main DB tryout & question workflow metrics safely per `ECOSYSTEM_MAP.md`.
 * **Tryout Deletion**: `tryouts.controller.ts` validates the optional `DELETE /team/control-center/tryouts/:id?force=true` flag. Administrator-only force deletion uses `tryout-deletion.ts` in a serializable transaction to remove exam history and sandbox sessions, detach reusable questions by QC status, and delete the tryout/subtests. Default deletion still rejects dependencies.
+
+* **Shared schema initialization**: `jitu_internal.SchemaMigration` records completed lifecycle schema setup so serverless instances avoid repeated DDL and PostgREST schema reloads. Bump the lifecycle marker when its initialization changes.
