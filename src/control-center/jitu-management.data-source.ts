@@ -2356,7 +2356,35 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       : Prisma.empty;
 
     const rows = await this.query<Array<any>>(Prisma.sql`
-      SELECT 
+      WITH selected_questions AS MATERIALIZED (
+        SELECT q.* FROM public."Question" q
+        ${where}
+        ORDER BY q."createdAt" DESC
+        LIMIT 1000
+      ), attempt_counts AS (
+        SELECT question_id, SUM(attempts)::int AS total FROM (
+          SELECT ua."question_id", COUNT(*)::int AS attempts
+          FROM public."UserAnswer" ua JOIN selected_questions sq ON sq."id" = ua."question_id"
+          GROUP BY ua."question_id"
+          UNION ALL
+          SELECT dql."questionId", COUNT(*)::int
+          FROM public."DailyQuestionLog" dql JOIN selected_questions sq ON sq."id" = dql."questionId"
+          GROUP BY dql."questionId"
+          UNION ALL
+          SELECT pat."question_id", COUNT(*)::int
+          FROM public."PracticeAttempt" pat JOIN selected_questions sq ON sq."id" = pat."question_id"
+          GROUP BY pat."question_id"
+        ) counts GROUP BY question_id
+      ), question_options AS (
+        SELECT opt."question_id", json_agg(
+          json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
+          ORDER BY opt."order" ASC
+        ) AS options
+        FROM public."QuestionItem" opt
+        JOIN selected_questions sq ON sq."id" = opt."question_id"
+        GROUP BY opt."question_id"
+      )
+      SELECT
         q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch", q."difficulty", q."type", 
         q."target", COALESCE(q."status", 'DRAFT') AS "status",
         q."revision_notes" AS "revisionNotes", q."reviewed_by" AS "reviewedBy", q."reviewed_at" AS "reviewedAt",
@@ -2372,20 +2400,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         COALESCE(tout."status"::text, sub_tout."status"::text) AS "tryoutStatus",
         (COALESCE(tout."status"::text, sub_tout."status"::text) IN ('NOT_STARTED', 'IN_PROGRESS')) AS "isLockedInTryout",
         EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id") AS "isPracticeAssigned",
-        (
-          (SELECT COUNT(*)::int FROM public."UserAnswer" ua WHERE ua."question_id" = q."id") +
-          (SELECT COUNT(*)::int FROM public."DailyQuestionLog" dql WHERE dql."questionId" = q."id") +
-          (SELECT COUNT(*)::int FROM public."PracticeAttempt" pat WHERE pat."question_id" = q."id")
-        ) AS "attemptCount",
+        COALESCE(ac.total, 0) AS "attemptCount",
         pkg."title" AS "packageTitle",
-        (
-          SELECT json_agg(
-            json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
-            ORDER BY opt."order" ASC
-          )
-          FROM public."QuestionItem" opt
-          WHERE opt."question_id" = q."id"
-        ) AS "options",
+        qo.options AS "options",
         (
           SELECT json_build_object(
             'id', sol."id", 'steps', sol."steps", 'staticContent', sol."staticContent",
@@ -2394,7 +2411,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
           FROM public."QuestionSolution" sol
           WHERE sol."questionId" = q."id"
         ) AS "solution"
-      FROM public."Question" q
+      FROM selected_questions q
+      LEFT JOIN attempt_counts ac ON ac.question_id = q."id"
+      LEFT JOIN question_options qo ON qo.question_id = q."id"
       LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
       LEFT JOIN public."Topic" t ON t."id" = s."topicId"
       LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
@@ -2402,9 +2421,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
       LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
       LEFT JOIN public."soal_asli_packages" pkg ON pkg."id" = q."package_id"
-      ${where}
       ORDER BY q."createdAt" DESC
-      LIMIT 1000
     `);
     return rows.map((r) => ({
       ...r,
@@ -2974,6 +2991,13 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     `);
 
     const assignedRows = await this.query<Array<any>>(Prisma.sql`
+      WITH attempt_counts AS (
+        SELECT "question_id",
+          COUNT(*) FILTER (WHERE "status" = 'ANSWERED')::int AS answered,
+          COUNT(*) FILTER (WHERE "status" = 'SKIPPED')::int AS skipped
+        FROM public."PracticeAttempt"
+        GROUP BY "question_id"
+      )
       SELECT
         q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch",
         q."difficulty", q."type", q."target", COALESCE(q."status", 'DRAFT') AS "status",
@@ -2987,8 +3011,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         COALESCE(t."title", t_direct."title") AS "topicTitle",
         tout."title" AS "tryoutTitle",
         tout."status"::text AS "tryoutStatus",
-        (SELECT COUNT(*)::int FROM public."PracticeAttempt" pat WHERE pat."question_id" = q."id" AND pat."status" = 'ANSWERED') AS "answeredCount",
-        (SELECT COUNT(*)::int FROM public."PracticeAttempt" pat WHERE pat."question_id" = q."id" AND pat."status" = 'SKIPPED') AS "skippedCount",
+        COALESCE(ac.answered, 0) AS "answeredCount",
+        COALESCE(ac.skipped, 0) AS "skippedCount",
         (
           SELECT json_agg(
             json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
@@ -3007,6 +3031,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         ) AS "solution"
       FROM public."Question" q
       LEFT JOIN public."PracticeAssignment" pa ON pa."question_id" = q."id"
+      LEFT JOIN attempt_counts ac ON ac."question_id" = q."id"
       LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
       LEFT JOIN public."Topic" t ON t."id" = s."topicId"
       LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
