@@ -231,9 +231,13 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
   }
 
   onApplicationBootstrap() {
-    // Warm the overview cache and ensure question lifecycle tables/columns exist.
+    // Warm the overview cache. The lifecycle schema is deliberately NOT ensured here: it runs
+    // ALTER TABLE statements that hold ACCESS EXCLUSIVE locks, and on Vercel the function is
+    // frozen as soon as the response is sent. A fire-and-forget DDL batch can therefore be
+    // frozen half way, leaving its transaction open (and "Question" locked for everyone)
+    // until the pooler recycles the connection. Every code path that needs the schema already
+    // awaits ensureLifecycleSchema() inside the request that triggered it.
     if (this.prisma) {
-      void this.ensureLifecycleSchema().catch(() => undefined);
       void this.refreshOverview().catch(() => undefined);
     }
   }
