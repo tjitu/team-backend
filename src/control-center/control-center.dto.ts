@@ -257,11 +257,14 @@ export class ReviewQuestionControlDto {
   @IsIn(['READY', 'NEEDS_REVISION', 'DRAFT']) @IsOptional() restoreStatus?: 'READY' | 'NEEDS_REVISION' | 'DRAFT';
 }
 
-export class BulkQuestionStatusDto {
+export class SelectedQuestionsDto {
   @IsArray()
   @IsString({ each: true })
   questionIds!: string[];
 
+}
+
+export class BulkQuestionStatusDto extends SelectedQuestionsDto {
   @IsIn(['DRAFT', 'QC_SANDBOX', 'NEEDS_REVISION', 'READY', 'RETIRED'])
   status!: 'DRAFT' | 'QC_SANDBOX' | 'NEEDS_REVISION' | 'READY' | 'RETIRED';
 

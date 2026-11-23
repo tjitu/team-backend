@@ -1,3 +1,4 @@
+import { deleteUnusedQuestions } from './question-deletion';
 import { validateAuthoredOptions } from './authored-answer-options';
 import { BadRequestException, Injectable, NotFoundException, OnApplicationBootstrap, OnModuleDestroy, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -171,6 +172,7 @@ export interface JituManagementDataSource {
     actorLabel?: string,
     tryoutId?: string | null,
   ): Promise<{ token: string; questionId: string | null; tryoutId: string | null; expiresAt: string }>;
+  deleteQuestions(questionIds: string[]): Promise<{ deletedCount: number }>;
   deleteQuestion(id: string): Promise<unknown>;
   getPracticeWorkspace(): Promise<unknown>;
   assignPracticeQuestions(questionIds: string[], actorLabel?: string, batch?: string): Promise<unknown>;
@@ -3001,29 +3003,16 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     };
   }
 
-  async deleteQuestion(id: string) {
+  async deleteQuestions(questionIds: string[]) {
     await this.ensureLifecycleSchema();
-    const usageRows = await this.query<Array<{ usageCount: number }>>(Prisma.sql`
-      SELECT (
-        (SELECT COUNT(*)::int FROM public."UserAnswer" WHERE "question_id" = ${id}) +
-        (SELECT COUNT(*)::int FROM public."DailyQuestionLog" WHERE "questionId" = ${id}) +
-        (SELECT COUNT(*)::int FROM public."PracticeAttempt" WHERE "question_id" = ${id})
-      ) AS "usageCount"
-    `);
-    const usageCount = Number(usageRows[0]?.usageCount ?? 0);
-    if (usageCount > 0) {
-      throw new BadRequestException(
-        `Soal ini sudah memiliki ${usageCount} riwayat pengerjaan siswa sehingga tidak bisa dihapus permanen. Gunakan tombol "Nonaktifkan (Retired)" agar riwayat nilai siswa tetap aman.`,
-      );
-    }
+    const result = await deleteUnusedQuestions(this.database(), questionIds);
+    this.invalidateOverview();
+    return result;
+  }
 
-    await this.query(Prisma.sql`DELETE FROM public."PracticeAssignment" WHERE "question_id" = ${id}`);
-    await this.query(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
-    await this.query(Prisma.sql`DELETE FROM public."QuestionSolution" WHERE "questionId" = ${id}`);
-    const rows = await this.query<Array<any>>(Prisma.sql`
-      DELETE FROM public."Question" WHERE "id" = ${id} RETURNING "id"
-    `);
-    return rows[0] || null;
+  async deleteQuestion(id: string) {
+    await this.deleteQuestions([id]);
+    return { id };
   }
 
   async getPracticeWorkspace() {

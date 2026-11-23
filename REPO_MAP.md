@@ -43,3 +43,4 @@ team-backend/
 
 * **Shared schema initialization**: `jitu_internal.SchemaMigration` records completed lifecycle schema setup so serverless instances avoid repeated DDL and PostgREST schema reloads. Bump the lifecycle marker when its initialization changes.
 * Admin batch removal uses DELETE /api/team/control-center/questions/batches/selected with name, target and optional tryoutId. It clears batch labels on matching active questions.
+* Admin POST /api/team/control-center/questions/bulk-delete removes selected unused questions in one transaction.
