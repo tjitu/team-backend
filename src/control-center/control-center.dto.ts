@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsUUID, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateTryoutControlDto {
   @IsString() @MinLength(2) title!: string;
@@ -96,6 +96,7 @@ export class CreateSolutionStepDto {
 }
 
 export class CreateQuestionControlDto {
+  @IsUUID("4") @IsOptional() importSlotKey?: string;
   @IsString() subtest!: string;
   @IsString() @IsOptional() topicId?: string | null;
   @IsString() @IsOptional() subtopicId?: string | null;

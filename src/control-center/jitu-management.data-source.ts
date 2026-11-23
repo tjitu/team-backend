@@ -2426,7 +2426,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
   async createQuestion(input: any) {
     await this.ensureLifecycleSchema();
-    const questionId = randomUUID();
+    const questionId = input.importSlotKey
+      ? 'chunk-' + createHash('sha256').update(input.importSlotKey).digest('hex')
+      : randomUUID();
     const target = input.target || 'DRAFT';
     const status =
       input.status && ['DRAFT', 'QC_SANDBOX', 'NEEDS_REVISION', 'READY', 'RETIRED'].includes(input.status)
@@ -2494,7 +2496,16 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     }
 
     const database = this.database();
-    await database.$transaction(writes.map(statement => database.$executeRaw(statement)));
+    try {
+      await database.$transaction(writes.map(statement => database.$executeRaw(statement)));
+    } catch (error) {
+      if (input.importSlotKey && error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2010' && error.meta?.code === '23505') {
+        const existing = await this.questionById(questionId);
+        if (existing) return existing;
+      }
+      throw error;
+    }
     return this.questionById(questionId);
   }
 
