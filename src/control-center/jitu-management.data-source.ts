@@ -1,3 +1,4 @@
+import { insertQuestionOptions, selectQuestionRows } from './question-statements';
 import { deleteUnusedQuestions } from './question-deletion';
 import { validateAuthoredOptions } from './authored-answer-options';
 import { BadRequestException, Injectable, NotFoundException, OnApplicationBootstrap, OnModuleDestroy, Optional, ServiceUnavailableException } from '@nestjs/common';
@@ -2404,74 +2405,16 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       ? Prisma.sql`WHERE ${Prisma.join(filterClauses, ' AND ')}`
       : Prisma.empty;
 
-    const rows = await this.query<Array<any>>(Prisma.sql`
-      WITH selected_questions AS MATERIALIZED (
-        SELECT q.* FROM public."Question" q
-        ${where}
-        ORDER BY q."createdAt" DESC
-        LIMIT 1000
-      ), attempt_counts AS (
-        SELECT question_id, SUM(attempts)::int AS total FROM (
-          SELECT ua."question_id", COUNT(*)::int AS attempts
-          FROM public."UserAnswer" ua JOIN selected_questions sq ON sq."id" = ua."question_id"
-          GROUP BY ua."question_id"
-          UNION ALL
-          SELECT dql."questionId", COUNT(*)::int
-          FROM public."DailyQuestionLog" dql JOIN selected_questions sq ON sq."id" = dql."questionId"
-          GROUP BY dql."questionId"
-          UNION ALL
-          SELECT pat."question_id", COUNT(*)::int
-          FROM public."PracticeAttempt" pat JOIN selected_questions sq ON sq."id" = pat."question_id"
-          GROUP BY pat."question_id"
-        ) counts GROUP BY question_id
-      ), question_options AS (
-        SELECT opt."question_id", json_agg(
-          json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
-          ORDER BY opt."order" ASC
-        ) AS options
-        FROM public."QuestionItem" opt
-        JOIN selected_questions sq ON sq."id" = opt."question_id"
-        GROUP BY opt."question_id"
-      )
-      SELECT
-        q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch", q."difficulty", q."type", 
-        q."target", COALESCE(q."status", 'DRAFT') AS "status",
-        q."revision_notes" AS "revisionNotes", q."reviewed_by" AS "reviewedBy", q."reviewed_at" AS "reviewedAt",
-        COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
-        q."package_id" AS "packageId",
-        q."narration", q."content", q."imageUrl", q."points",
-        q."correct_answer_short_answer" AS "correctAnswer",
-        q."createdAt", q."updatedAt",
-        s."title" AS "subtopicTitle",
-        COALESCE(t."title", t_direct."title") AS "topicTitle",
-        COALESCE(tout."title", sub_tout."title") AS "tryoutTitle",
-        COALESCE(tout."code", sub_tout."code") AS "tryoutCode",
-        COALESCE(tout."status"::text, sub_tout."status"::text) AS "tryoutStatus",
-        (COALESCE(tout."status"::text, sub_tout."status"::text) IN ('NOT_STARTED', 'IN_PROGRESS')) AS "isLockedInTryout",
-        EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id") AS "isPracticeAssigned",
-        COALESCE(ac.total, 0) AS "attemptCount",
-        pkg."title" AS "packageTitle",
-        qo.options AS "options",
-        (
-          SELECT json_build_object(
-            'id', sol."id", 'steps', sol."steps", 'staticContent', sol."staticContent",
-            'quickTrick', sol."quickTrick", 'keyFormula', sol."keyFormula", 'defaultView', sol."defaultView"
-          )
-          FROM public."QuestionSolution" sol
-          WHERE sol."questionId" = q."id"
-        ) AS "solution"
-      FROM selected_questions q
-      LEFT JOIN attempt_counts ac ON ac.question_id = q."id"
-      LEFT JOIN question_options qo ON qo.question_id = q."id"
-      LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
-      LEFT JOIN public."Topic" t ON t."id" = s."topicId"
-      LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
-      LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
-      LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
-      LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
-      LEFT JOIN public."soal_asli_packages" pkg ON pkg."id" = q."package_id"
-      ORDER BY q."createdAt" DESC
-    `);
+    return this.readQuestionRows(where);
+  }
+
+  private async questionById(id: string) {
+    const [question] = await this.readQuestionRows(Prisma.sql`WHERE q."id" = ${id}`);
+    return question ?? null;
+  }
+
+  private async readQuestionRows(where: Prisma.Sql) {
+    const rows = await this.query<Array<Record<string, unknown>>>(selectQuestionRows(where));
     return rows.map((r) => ({
       ...r,
       options: r.options || [],
@@ -2526,13 +2469,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     `);
 
     if (type !== 'ISIAN_SINGKAT' && Array.isArray(input.options) && input.options.length > 0) {
-      for (const opt of input.options) {
-        if (!opt.content && !opt.isCorrect) continue;
-        writes.push(Prisma.sql`
-          INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
-          VALUES (${randomUUID()}, ${questionId}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
-        `);
-      }
+      const insertOptions = insertQuestionOptions(questionId, input.options);
+      if (insertOptions) writes.push(insertOptions);
     }
 
     const stepsJson = input.solutionSteps && input.solutionSteps.length > 0 ? JSON.stringify(input.solutionSteps) : null;
@@ -2557,8 +2495,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const database = this.database();
     await database.$transaction(writes.map(statement => database.$executeRaw(statement)));
-    const result = await this.listQuestions(questionId, '', '', '', true);
-    return Array.isArray(result) ? result[0] : null;
+    return this.questionById(questionId);
   }
 
   async updateQuestion(id: string, input: any) {
@@ -2699,13 +2636,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     if (Array.isArray(input.options)) {
       writes.push(Prisma.sql`DELETE FROM public."QuestionItem" WHERE "question_id" = ${id}`);
       if (effectiveType !== 'ISIAN_SINGKAT') {
-        for (const opt of input.options) {
-          if (!opt.content && !opt.isCorrect) continue;
-          writes.push(Prisma.sql`
-            INSERT INTO public."QuestionItem" ("id", "question_id", "content", "is_correct", "order")
-            VALUES (${randomUUID()}, ${id}, ${opt.content}, ${Boolean(opt.isCorrect)}, ${opt.order})
-          `);
-        }
+        const insertOptions = insertQuestionOptions(id, input.options);
+        if (insertOptions) writes.push(insertOptions);
       }
     }
 
@@ -2737,8 +2669,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const database = this.database();
     await database.$transaction(writes.map(statement => database.$executeRaw(statement)));
-    const result = await this.listQuestions(id, '', '', '', true);
-    return Array.isArray(result) ? result[0] : null;
+    return this.questionById(id);
   }
 
   private async checkOptionsForQc(ids: string[]) {
@@ -2837,8 +2768,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       WHERE "id" = ${id}
     `);
 
-    const result = await this.listQuestions(id, '', '', '', true);
-    return Array.isArray(result) ? result[0] : null;
+    return this.questionById(id);
   }
 
   async bulkUpdateQuestionStatus(
@@ -3023,125 +2953,130 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       SELECT gen_random_uuid()::text, q."id", 'auto_sync', CURRENT_TIMESTAMP
       FROM public."Question" q
       WHERE q."target" = 'FOR_PRACTICE' AND COALESCE(q."status", 'DRAFT') = 'READY'
+        AND NOT EXISTS (
+          SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id"
+        )
       ON CONFLICT ("question_id") DO NOTHING
     `);
 
-    const assignedRows = await this.query<Array<any>>(Prisma.sql`
-      WITH attempt_counts AS (
-        SELECT "question_id",
-          COUNT(*) FILTER (WHERE "status" = 'ANSWERED')::int AS answered,
-          COUNT(*) FILTER (WHERE "status" = 'SKIPPED')::int AS skipped
-        FROM public."PracticeAttempt"
-        GROUP BY "question_id"
-      )
-      SELECT
-        q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch",
-        q."difficulty", q."type", q."target", COALESCE(q."status", 'DRAFT') AS "status",
-        q."revision_notes" AS "revisionNotes", q."reviewed_by" AS "reviewedBy", q."reviewed_at" AS "reviewedAt",
-        q."tryoutId", q."narration", q."content", q."imageUrl", q."points",
-        q."correct_answer_short_answer" AS "correctAnswer",
-        q."createdAt", q."updatedAt",
-        pa."assigned_at" AS "assignedAt", pa."assigned_by" AS "assignedBy", pa."sort_order" AS "sortOrder",
-        (pa."question_id" IS NOT NULL AND COALESCE(q."status", 'DRAFT') = 'READY') AS "isLiveInPractice",
-        s."title" AS "subtopicTitle",
-        COALESCE(t."title", t_direct."title") AS "topicTitle",
-        tout."title" AS "tryoutTitle",
-        tout."status"::text AS "tryoutStatus",
-        COALESCE(ac.answered, 0) AS "answeredCount",
-        COALESCE(ac.skipped, 0) AS "skippedCount",
-        (
-          SELECT json_agg(
-            json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
-            ORDER BY opt."order" ASC
-          )
-          FROM public."QuestionItem" opt
-          WHERE opt."question_id" = q."id"
-        ) AS "options",
-        (
-          SELECT json_build_object(
-            'id', sol."id", 'steps', sol."steps", 'staticContent', sol."staticContent",
-            'quickTrick', sol."quickTrick", 'keyFormula', sol."keyFormula", 'defaultView', sol."defaultView"
-          )
-          FROM public."QuestionSolution" sol
-          WHERE sol."questionId" = q."id"
-        ) AS "solution"
-      FROM public."Question" q
-      LEFT JOIN public."PracticeAssignment" pa ON pa."question_id" = q."id"
-      LEFT JOIN attempt_counts ac ON ac."question_id" = q."id"
-      LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
-      LEFT JOIN public."Topic" t ON t."id" = s."topicId"
-      LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
-      LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
-      WHERE (q."target" = 'FOR_PRACTICE' OR pa."question_id" IS NOT NULL)
-        AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
-        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
-      ORDER BY
-        CASE WHEN pa."question_id" IS NULL THEN 0 ELSE 1 END ASC,
-        CASE WHEN pa."question_id" IS NULL THEN q."createdAt" END DESC NULLS LAST,
-        pa."sort_order" ASC NULLS LAST,
-        CASE COALESCE(q."status", 'DRAFT')
-          WHEN 'NEEDS_REVISION' THEN 0
-          WHEN 'QC_SANDBOX' THEN 1
-          WHEN 'DRAFT' THEN 2
-          WHEN 'READY' THEN 3
-          ELSE 4
-        END ASC,
-        COALESCE(pa."assigned_at", q."createdAt") DESC
-    `);
+    const [assignedRows, pickerRows, attemptRows] = await Promise.all([
+      this.query<Array<any>>(Prisma.sql`
+        WITH attempt_counts AS (
+          SELECT "question_id",
+            COUNT(*) FILTER (WHERE "status" = 'ANSWERED')::int AS answered,
+            COUNT(*) FILTER (WHERE "status" = 'SKIPPED')::int AS skipped
+          FROM public."PracticeAttempt"
+          GROUP BY "question_id"
+        )
+        SELECT
+          q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch",
+          q."difficulty", q."type", q."target", COALESCE(q."status", 'DRAFT') AS "status",
+          q."revision_notes" AS "revisionNotes", q."reviewed_by" AS "reviewedBy", q."reviewed_at" AS "reviewedAt",
+          q."tryoutId", q."narration", q."content", q."imageUrl", q."points",
+          q."correct_answer_short_answer" AS "correctAnswer",
+          q."createdAt", q."updatedAt",
+          pa."assigned_at" AS "assignedAt", pa."assigned_by" AS "assignedBy", pa."sort_order" AS "sortOrder",
+          (pa."question_id" IS NOT NULL AND COALESCE(q."status", 'DRAFT') = 'READY') AS "isLiveInPractice",
+          s."title" AS "subtopicTitle",
+          COALESCE(t."title", t_direct."title") AS "topicTitle",
+          tout."title" AS "tryoutTitle",
+          tout."status"::text AS "tryoutStatus",
+          COALESCE(ac.answered, 0) AS "answeredCount",
+          COALESCE(ac.skipped, 0) AS "skippedCount",
+          (
+            SELECT json_agg(
+              json_build_object('id', opt."id", 'content', opt."content", 'isCorrect', opt."is_correct", 'order', opt."order")
+              ORDER BY opt."order" ASC
+            )
+            FROM public."QuestionItem" opt
+            WHERE opt."question_id" = q."id"
+          ) AS "options",
+          (
+            SELECT json_build_object(
+              'id', sol."id", 'steps', sol."steps", 'staticContent', sol."staticContent",
+              'quickTrick', sol."quickTrick", 'keyFormula', sol."keyFormula", 'defaultView', sol."defaultView"
+            )
+            FROM public."QuestionSolution" sol
+            WHERE sol."questionId" = q."id"
+          ) AS "solution"
+        FROM public."Question" q
+        LEFT JOIN public."PracticeAssignment" pa ON pa."question_id" = q."id"
+        LEFT JOIN attempt_counts ac ON ac."question_id" = q."id"
+        LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
+        LEFT JOIN public."Topic" t ON t."id" = s."topicId"
+        LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
+        LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
+        WHERE (q."target" = 'FOR_PRACTICE' OR pa."question_id" IS NOT NULL)
+          AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+          AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
+        ORDER BY
+          CASE WHEN pa."question_id" IS NULL THEN 0 ELSE 1 END ASC,
+          CASE WHEN pa."question_id" IS NULL THEN q."createdAt" END DESC NULLS LAST,
+          pa."sort_order" ASC NULLS LAST,
+          CASE COALESCE(q."status", 'DRAFT')
+            WHEN 'NEEDS_REVISION' THEN 0
+            WHEN 'QC_SANDBOX' THEN 1
+            WHEN 'DRAFT' THEN 2
+            WHEN 'READY' THEN 3
+            ELSE 4
+          END ASC,
+          COALESCE(pa."assigned_at", q."createdAt") DESC
+      `),
 
-    const pickerRows = await this.query<Array<any>>(Prisma.sql`
-      SELECT
-        q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch",
-        q."difficulty", q."type", q."target", COALESCE(q."status", 'DRAFT') AS "status",
-        COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
-        q."narration", q."content", q."points", q."createdAt",
-        s."title" AS "subtopicTitle",
-        COALESCE(t."title", t_direct."title") AS "topicTitle",
-        COALESCE(tout."title", sub_tout."title") AS "tryoutTitle",
-        COALESCE(tout."status"::text, sub_tout."status"::text) AS "tryoutStatus",
-        (COALESCE(tout."status"::text, sub_tout."status"::text) IN ('NOT_STARTED', 'IN_PROGRESS')) AS "isLockedInTryout",
-        EXISTS(SELECT 1 FROM public."QuestionSolution" sol WHERE sol."questionId" = q."id") AS "hasSolution"
-      FROM public."Question" q
-      LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
-      LEFT JOIN public."Topic" t ON t."id" = s."topicId"
-      LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
-      LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
-      LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
-      LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
-      WHERE COALESCE(q."status", 'DRAFT') <> 'RETIRED'
-        AND COALESCE(q."target", 'DRAFT') NOT IN ('SOAL_ASLI', 'FOR_PRACTICE', 'FOR_TRYOUT')
-        AND COALESCE(q."tryoutId", sub."try_out_id") IS NULL
-        AND NOT EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id")
-      ORDER BY q."createdAt" DESC
-      LIMIT 500
-    `);
+      this.query<Array<any>>(Prisma.sql`
+        SELECT
+          q."id", q."subtest", q."topic_id" AS "topicId", q."subtopic_id" AS "subtopicId", q."pattern", q."batch",
+          q."difficulty", q."type", q."target", COALESCE(q."status", 'DRAFT') AS "status",
+          COALESCE(q."tryoutId", sub."try_out_id") AS "tryoutId",
+          q."narration", q."content", q."points", q."createdAt",
+          s."title" AS "subtopicTitle",
+          COALESCE(t."title", t_direct."title") AS "topicTitle",
+          COALESCE(tout."title", sub_tout."title") AS "tryoutTitle",
+          COALESCE(tout."status"::text, sub_tout."status"::text) AS "tryoutStatus",
+          (COALESCE(tout."status"::text, sub_tout."status"::text) IN ('NOT_STARTED', 'IN_PROGRESS')) AS "isLockedInTryout",
+          EXISTS(SELECT 1 FROM public."QuestionSolution" sol WHERE sol."questionId" = q."id") AS "hasSolution"
+        FROM public."Question" q
+        LEFT JOIN public."Subtopic" s ON s."id" = q."subtopic_id"
+        LEFT JOIN public."Topic" t ON t."id" = s."topicId"
+        LEFT JOIN public."Topic" t_direct ON t_direct."id" = q."topic_id"
+        LEFT JOIN public."Subtest" sub ON sub."id" = q."subtest_id"
+        LEFT JOIN public."TryOut" tout ON tout."id" = q."tryoutId"
+        LEFT JOIN public."TryOut" sub_tout ON sub_tout."id" = sub."try_out_id"
+        WHERE COALESCE(q."status", 'DRAFT') <> 'RETIRED'
+          AND COALESCE(q."target", 'DRAFT') NOT IN ('SOAL_ASLI', 'FOR_PRACTICE', 'FOR_TRYOUT')
+          AND COALESCE(q."tryoutId", sub."try_out_id") IS NULL
+          AND NOT EXISTS(SELECT 1 FROM public."PracticeAssignment" pa WHERE pa."question_id" = q."id")
+        ORDER BY q."createdAt" DESC
+        LIMIT 500
+      `),
 
-    const attemptRows = await this.query<Array<{
-      subtest: string;
-      userId: string;
-      accessedCount: number;
-    }>>(Prisma.sql`
-      SELECT
-        CASE
-          WHEN UPPER(TRIM(q."subtest")) IN ('PU', 'PENALARAN_UMUM') THEN 'PENALARAN_UMUM'
-          WHEN UPPER(TRIM(q."subtest")) IN ('PK', 'PENGETAHUAN_KUANTITATIF') THEN 'PENGETAHUAN_KUANTITATIF'
-          WHEN UPPER(TRIM(q."subtest")) IN ('PM', 'PENALARAN_MATEMATIKA') THEN 'PENALARAN_MATEMATIKA'
-          WHEN UPPER(TRIM(q."subtest")) IN ('PBM', 'PEMAHAMAN_BACAAN', 'PEMAHAMAN_BACAAN_MENULIS') THEN 'PEMAHAMAN_BACAAN_MENULIS'
-          WHEN UPPER(TRIM(q."subtest")) IN ('PPU', 'PENGETAHUAN_UMUM', 'PENGETAHUAN_PEMAHAMAN_UMUM') THEN 'PENGETAHUAN_PEMAHAMAN_UMUM'
-          WHEN UPPER(TRIM(q."subtest")) IN ('LBI', 'LITERASI_INDONESIA', 'LITERASI_BAHASA_INDONESIA') THEN 'LITERASI_INDONESIA'
-          WHEN UPPER(TRIM(q."subtest")) IN ('LBE', 'LITERASI_INGGRIS', 'LITERASI_BAHASA_INGGRIS') THEN 'LITERASI_INGGRIS'
-          ELSE UPPER(TRIM(q."subtest"))
-        END AS "subtest",
-        pat."user_id" AS "userId",
-        COUNT(DISTINCT pa."question_id")::int AS "accessedCount"
-      FROM public."PracticeAssignment" pa
-      JOIN public."Question" q ON q."id" = pa."question_id"
-      JOIN public."PracticeAttempt" pat ON pat."question_id" = pa."question_id"
-      JOIN public."user" u ON u."id" = pat."user_id"
-      WHERE COALESCE(q."status", 'DRAFT') = 'READY'
-        AND COALESCE(u."isSandbox", false) = false
-      GROUP BY 1, pat."user_id"
-    `);
+      this.query<Array<{
+        subtest: string;
+        userId: string;
+        accessedCount: number;
+      }>>(Prisma.sql`
+        SELECT
+          CASE
+            WHEN UPPER(TRIM(q."subtest")) IN ('PU', 'PENALARAN_UMUM') THEN 'PENALARAN_UMUM'
+            WHEN UPPER(TRIM(q."subtest")) IN ('PK', 'PENGETAHUAN_KUANTITATIF') THEN 'PENGETAHUAN_KUANTITATIF'
+            WHEN UPPER(TRIM(q."subtest")) IN ('PM', 'PENALARAN_MATEMATIKA') THEN 'PENALARAN_MATEMATIKA'
+            WHEN UPPER(TRIM(q."subtest")) IN ('PBM', 'PEMAHAMAN_BACAAN', 'PEMAHAMAN_BACAAN_MENULIS') THEN 'PEMAHAMAN_BACAAN_MENULIS'
+            WHEN UPPER(TRIM(q."subtest")) IN ('PPU', 'PENGETAHUAN_UMUM', 'PENGETAHUAN_PEMAHAMAN_UMUM') THEN 'PENGETAHUAN_PEMAHAMAN_UMUM'
+            WHEN UPPER(TRIM(q."subtest")) IN ('LBI', 'LITERASI_INDONESIA', 'LITERASI_BAHASA_INDONESIA') THEN 'LITERASI_INDONESIA'
+            WHEN UPPER(TRIM(q."subtest")) IN ('LBE', 'LITERASI_INGGRIS', 'LITERASI_BAHASA_INGGRIS') THEN 'LITERASI_INGGRIS'
+            ELSE UPPER(TRIM(q."subtest"))
+          END AS "subtest",
+          pat."user_id" AS "userId",
+          COUNT(DISTINCT pa."question_id")::int AS "accessedCount"
+        FROM public."PracticeAssignment" pa
+        JOIN public."Question" q ON q."id" = pa."question_id"
+        JOIN public."PracticeAttempt" pat ON pat."question_id" = pa."question_id"
+        JOIN public."user" u ON u."id" = pat."user_id"
+        WHERE COALESCE(q."status", 'DRAFT') = 'READY'
+          AND COALESCE(u."isSandbox", false) = false
+        GROUP BY 1, pat."user_id"
+      `),
+    ]);
 
     const subtestMap: Record<string, number> = {
       PENALARAN_UMUM: 0,
@@ -4326,8 +4261,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       `);
     }
 
-    const result = await this.listQuestions(id, '', '', '', true);
-    return Array.isArray(result) ? result[0] : null;
+    return this.questionById(id);
   }
 
   async onModuleDestroy() {

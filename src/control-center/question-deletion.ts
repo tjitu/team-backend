@@ -20,9 +20,14 @@ export async function deleteUnusedQuestions(db: PrismaClient, questionIds: strin
     if (used.length) throw new BadRequestException(
       `${used.length} soal memiliki riwayat pengerjaan siswa. Batalkan pilihan soal tersebut. Tidak ada soal yang dihapus.`,
     );
-    await tx.$executeRaw`DELETE FROM public."PracticeAssignment" WHERE question_id IN (${selected})`;
-    await tx.$executeRaw`DELETE FROM public."QuestionItem" WHERE question_id IN (${selected})`;
-    await tx.$executeRaw`DELETE FROM public."QuestionSolution" WHERE "questionId" IN (${selected})`;
+    await tx.$executeRaw`
+      WITH assignments AS (
+        DELETE FROM public."PracticeAssignment" WHERE question_id IN (${selected})
+      ), items AS (
+        DELETE FROM public."QuestionItem" WHERE question_id IN (${selected})
+      )
+      DELETE FROM public."QuestionSolution" WHERE "questionId" IN (${selected})
+    `;
     const deletedCount = await tx.$executeRaw`DELETE FROM public."Question" WHERE id IN (${selected})`;
     return { deletedCount };
   }, { timeout: 15000 });
