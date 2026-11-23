@@ -269,6 +269,12 @@ export class ControlCenterController {
     return this.controlCenter.listQuestionBatches(request.user.id);
   }
 
+  @Delete('questions/batches/selected')
+  removeQuestionBatch(@Req() request: AuthenticatedRequest, @Query('name') name: string,
+    @Query('target') target: string, @Query('tryoutId') tryoutId?: string) {
+    return this.controlCenter.removeQuestionBatch(request.user.id, name, target, tryoutId);
+  }
+
   @Get('questions')
   getQuestions(
     @Req() request: AuthenticatedRequest,

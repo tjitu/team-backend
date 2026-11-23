@@ -42,3 +42,4 @@ team-backend/
 * **Tryout Deletion**: `tryouts.controller.ts` validates the optional `DELETE /team/control-center/tryouts/:id?force=true` flag. Administrator-only force deletion uses `tryout-deletion.ts` in a serializable transaction to remove exam history and sandbox sessions, detach reusable questions by QC status, and delete the tryout/subtests. Default deletion still rejects dependencies.
 
 * **Shared schema initialization**: `jitu_internal.SchemaMigration` records completed lifecycle schema setup so serverless instances avoid repeated DDL and PostgREST schema reloads. Bump the lifecycle marker when its initialization changes.
+* Admin batch removal uses DELETE /api/team/control-center/questions/batches/selected with name, target and optional tryoutId. It clears batch labels on matching active questions.

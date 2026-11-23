@@ -280,6 +280,16 @@ export class ControlCenterService {
     return this.jituManagement.deleteSubtopic(id);
   }
 
+  async removeQuestionBatch(userId: string, name: string, target: string, tryoutId?: string) {
+    await this.requireAdministrator(userId);
+    if (typeof name !== 'string' || !name.trim() ||
+        !['FOR_PRACTICE', 'FOR_TRYOUT', 'DRAFT'].includes(target) ||
+        (target === 'FOR_TRYOUT' && (typeof tryoutId !== 'string' || !tryoutId.trim()))) {
+      throw new BadRequestException('Nama dan tujuan batch wajib diisi.');
+    }
+    return this.jituManagement.removeQuestionBatch(name.trim(), target, tryoutId);
+  }
+
   async listQuestionBatches(userId: string) {
     await this.requireAdministrator(userId);
     if (!this.jituManagement.listQuestionBatches) {

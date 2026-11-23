@@ -156,6 +156,7 @@ export interface JituManagementDataSource {
   createSubtopic(input: any): Promise<unknown>;
   updateSubtopic(id: string, input: any): Promise<unknown>;
   deleteSubtopic(id: string): Promise<unknown>;
+  removeQuestionBatch(name: string, target: string, tryoutId?: string): Promise<{ questionIds: string[] }>;
   listQuestionBatches?(): Promise<Array<{ batch: string; count: number }>>;
   listQuestions(search?: string, subtest?: string, target?: string, status?: string, includeArsip?: boolean, batch?: string): Promise<unknown>;
   createQuestion(input: any): Promise<unknown>;
@@ -2275,6 +2276,27 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         }" dan tidak boleh dicampur dengan paket Tryout lain. Silakan buat nama batch baru.`,
       );
     }
+  }
+
+  async removeQuestionBatch(name: string, target: string, tryoutId?: string) {
+    await this.ensureLifecycleSchema();
+    const rows = await this.query<Array<{ id: string }>>(Prisma.sql`
+      UPDATE public."Question" q SET "batch" = NULL, "updatedAt" = CURRENT_TIMESTAMP
+      WHERE TRIM(q."batch") = ${name}
+        AND COALESCE(q."target", 'DRAFT') <> 'SOAL_ASLI'
+        AND COALESCE(q."status", 'DRAFT') <> 'RETIRED'
+        AND CASE
+          WHEN q."target" = 'FOR_TRYOUT' OR q."tryoutId" IS NOT NULL OR q."subtest_id" IS NOT NULL
+            THEN ${target} = 'FOR_TRYOUT' AND COALESCE(q."tryoutId",
+              (SELECT s."try_out_id" FROM public."Subtest" s WHERE s.id = q."subtest_id")) = ${tryoutId || null}
+          WHEN q."target" = 'FOR_PRACTICE' OR EXISTS (
+            SELECT FROM public."PracticeAssignment" a WHERE a."question_id" = q.id
+          ) THEN ${target} = 'FOR_PRACTICE'
+          ELSE ${target} = 'DRAFT' END
+      RETURNING q.id
+    `);
+    this.invalidateOverview();
+    return { questionIds: rows.map(row => row.id) };
   }
 
   async listQuestionBatches(): Promise<
