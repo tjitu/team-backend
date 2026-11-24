@@ -6,6 +6,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { VercelAnalyticsService } from './vercel-analytics.service';
 import { deleteTryoutRecords } from './tryout-deletion';
+import { listTryoutParticipants, resetTryoutParticipant } from './tryout-participants';
 
 export type TryoutInput = {
   title?: string;
@@ -133,6 +134,8 @@ export interface JituManagementDataSource {
   createTryout(input: Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>> & TryoutInput): Promise<unknown>;
   updateTryout(id: string, input: TryoutInput): Promise<unknown | null>;
   deleteTryout(id: string, force?: boolean): Promise<unknown | null>;
+  listTryoutParticipants(id: string): Promise<unknown>;
+  resetTryoutParticipant(id: string, attemptId: string): Promise<unknown>;
   listPackages(): Promise<unknown>;
   createPackage(input: Required<Pick<PackageInput, 'name' | 'tokenAmount' | 'price'>> & PackageInput): Promise<unknown>;
   updatePackage(id: string, input: PackageInput): Promise<unknown | null>;
@@ -1166,6 +1169,14 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const result = await deleteTryoutRecords(this.database(), id, force);
     if (result) this.invalidateOverview();
     return result;
+  }
+
+  async listTryoutParticipants(id: string) {
+    return listTryoutParticipants(this.database(), id);
+  }
+
+  async resetTryoutParticipant(id: string, attemptId: string) {
+    return resetTryoutParticipant(this.database(), id, attemptId);
   }
 
   async listPackages() {

@@ -19,6 +19,16 @@ export class TryoutsController {
     return this.controlCenter.createTryout(request.user.id, body);
   }
 
+  @Get(':id/participants')
+  participants(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.controlCenter.listTryoutParticipants(request.user.id, id);
+  }
+
+  @Post(':id/participants/:attemptId/reset')
+  resetParticipant(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Param('attemptId') attemptId: string) {
+    return this.controlCenter.resetTryoutParticipant(request.user.id, id, attemptId);
+  }
+
   @Patch(':id')
   update(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: UpdateTryoutControlDto) {
     return this.controlCenter.updateTryout(request.user.id, id, body);

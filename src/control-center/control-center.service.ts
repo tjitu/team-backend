@@ -53,6 +53,16 @@ export class ControlCenterService {
     return this.jituManagement.listTryouts();
   }
 
+  async listTryoutParticipants(userId: string, id: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.listTryoutParticipants(id);
+  }
+
+  async resetTryoutParticipant(userId: string, id: string, attemptId: string) {
+    await this.requireAdministrator(userId);
+    return this.jituManagement.resetTryoutParticipant(id, attemptId);
+  }
+
   async createTryout(userId: string, input: TryoutInput & Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>>) {
     await this.requireAdministrator(userId);
     const start = new Date(input.scheduledStart).getTime();
