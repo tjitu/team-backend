@@ -11,7 +11,7 @@ export async function listTryoutParticipants(database: PrismaClient, tryoutId: s
       a.started_at AT TIME ZONE 'UTC' AS "startedAt",
       a.finished_at AT TIME ZONE 'UTC' AS "finishedAt"
     FROM public."TryOutAttempt" a JOIN public."user" u ON u.id = a."userId"
-    WHERE a.try_out_id = ${tryoutId}
+    WHERE a.try_out_id = ${tryoutId} AND COALESCE(u."isSandbox", false) = false
     ORDER BY a."userId", a.started_at DESC, a.id DESC
   `);
 }
@@ -24,7 +24,7 @@ export async function resetTryoutParticipant(database: PrismaClient, tryoutId: s
     `);
     const attempt = attempts[0];
     if (!attempt) throw new NotFoundException('Pengerjaan tidak ditemukan.');
-    if (attempt.status !== 'FINISHED') throw new BadRequestException('Hanya pengerjaan yang selesai dapat direset.');
+    if (!['FINISHED', 'IN_PROGRESS'].includes(attempt.status)) throw new BadRequestException('Hanya pengerjaan aktif atau selesai dapat direset.');
     const latest = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id FROM public."TryOutAttempt" WHERE "userId" = ${attempt.userId} AND try_out_id = ${tryoutId}
       ORDER BY started_at DESC, id DESC LIMIT 1

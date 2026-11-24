@@ -18,8 +18,13 @@ test('reset clears answers and scores while retaining registration and purchases
   assert.match(db.writes[2].sql, /UPDATE public\."TryOutAttempt"/);
   assert.ok(db.writes.every((q) => !q.sql.includes('UnlockedSolution')));
 });
-test('refuses in-progress and outdated attempts without modifying data', async () => {
-  for (const db of [database('IN_PROGRESS'), database('FINISHED', 'other')]) {
+test('allows resetting an in-progress attempt', async () => {
+  const db = database('IN_PROGRESS');
+  await resetTryoutParticipant(db, 'tryout', 'attempt');
+  assert.equal(db.writes.length, 3);
+});
+test('refuses not-started and outdated attempts without modifying data', async () => {
+  for (const db of [database('NOT_STARTED'), database('FINISHED', 'other')]) {
     await assert.rejects(resetTryoutParticipant(db, 'tryout', 'attempt'));
     assert.equal(db.writes.length, 0);
   }
