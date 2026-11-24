@@ -265,6 +265,10 @@ export class SelectedQuestionsDto {
 
 }
 
+export class DeleteQuestionsDto extends SelectedQuestionsDto {
+  @IsOptional() @IsString() @MinLength(1) tryoutId?: string;
+}
+
 export class BulkQuestionStatusDto extends SelectedQuestionsDto {
   @IsIn(['DRAFT', 'QC_SANDBOX', 'NEEDS_REVISION', 'READY', 'RETIRED'])
   status!: 'DRAFT' | 'QC_SANDBOX' | 'NEEDS_REVISION' | 'READY' | 'RETIRED';

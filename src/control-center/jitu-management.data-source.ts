@@ -176,7 +176,7 @@ export interface JituManagementDataSource {
     actorLabel?: string,
     tryoutId?: string | null,
   ): Promise<{ token: string; questionId: string | null; tryoutId: string | null; expiresAt: string }>;
-  deleteQuestions(questionIds: string[]): Promise<{ deletedCount: number }>;
+  deleteQuestions(questionIds: string[], tryoutId?: string): Promise<{ deletedCount: number }>;
   deleteQuestion(id: string): Promise<unknown>;
   getPracticeWorkspace(): Promise<unknown>;
   assignPracticeQuestions(questionIds: string[], actorLabel?: string, batch?: string): Promise<unknown>;
@@ -2955,9 +2955,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     };
   }
 
-  async deleteQuestions(questionIds: string[]) {
+  async deleteQuestions(questionIds: string[], tryoutId?: string) {
     await this.ensureLifecycleSchema();
-    const result = await deleteUnusedQuestions(this.database(), questionIds);
+    const result = await deleteUnusedQuestions(this.database(), questionIds, tryoutId);
     this.invalidateOverview();
     return result;
   }

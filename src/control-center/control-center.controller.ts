@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { AuthenticatedRequest } from '../auth/authenticated-user';
 import { SessionGuard } from '../auth/session.guard';
 import { ControlCenterService } from './control-center.service';
-import { AssignPracticeQuestionsDto, AssignTryoutQuestionsDto, SelectedQuestionsDto, BulkQuestionStatusDto, CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSandboxPreviewDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateVoucherControlDto, ReviewQuestionControlDto, ReviewTryoutControlDto, UnassignTryoutQuestionsDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSoalAsliPackageDto, UpdateSoalAsliQuestionSolutionDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutSubtestsDto, UpdateVoucherControlDto } from './control-center.dto';
+import { AssignPracticeQuestionsDto, AssignTryoutQuestionsDto, DeleteQuestionsDto, BulkQuestionStatusDto, CreateArticleControlDto, CreateDiscountControlDto, CreatePackageControlDto, CreateQuestionControlDto, CreateSandboxPreviewDto, CreateSubtopicControlDto, CreateTopicControlDto, CreateVoucherControlDto, ReviewQuestionControlDto, ReviewTryoutControlDto, UnassignTryoutQuestionsDto, UpdateArticleControlDto, UpdateDiscountControlDto, UpdateHiringApplicationDto, UpdateManagedUserDto, UpdatePackageControlDto, UpdateQuestionControlDto, UpdateSoalAsliPackageDto, UpdateSoalAsliQuestionSolutionDto, UpdateSubtopicControlDto, UpdateTopicControlDto, UpdateTryoutSubtestsDto, UpdateVoucherControlDto } from './control-center.dto';
 
 @Controller('team/control-center')
 @UseGuards(SessionGuard)
@@ -302,8 +302,8 @@ export class ControlCenterController {
   }
 
   @Post('questions/bulk-delete')
-  deleteQuestions(@Req() request: AuthenticatedRequest, @Body() body: SelectedQuestionsDto) {
-    return this.controlCenter.deleteQuestions(request.user.id, body.questionIds);
+  deleteQuestions(@Req() request: AuthenticatedRequest, @Body() body: DeleteQuestionsDto) {
+    return this.controlCenter.deleteQuestions(request.user.id, body.questionIds, body.tryoutId);
   }
 
   @Post('questions/bulk-status')

@@ -363,9 +363,9 @@ export class ControlCenterService {
     return this.jituManagement.createSandboxPreviewSession(questionId, actorLabel, tryoutId);
   }
 
-  async deleteQuestions(userId: string, questionIds: string[]) {
+  async deleteQuestions(userId: string, questionIds: string[], tryoutId?: string) {
     await this.requireAdministrator(userId);
-    return this.jituManagement.deleteQuestions(questionIds);
+    return this.jituManagement.deleteQuestions(questionIds, tryoutId);
   }
 
   async deleteQuestion(userId: string, id: string) {
