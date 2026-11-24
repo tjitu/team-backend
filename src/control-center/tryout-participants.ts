@@ -1,5 +1,6 @@
 ﻿import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 
 export async function listTryoutParticipants(database: PrismaClient, tryoutId: string) {
   const existing = await database.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -30,14 +31,15 @@ export async function resetTryoutParticipant(database: PrismaClient, tryoutId: s
       ORDER BY started_at DESC, id DESC LIMIT 1
     `);
     if (latest[0]?.id !== attemptId) throw new BadRequestException('Hanya pengerjaan terbaru yang dapat direset.');
-    await tx.$executeRaw(Prisma.sql`DELETE FROM public."UserAnswer" WHERE tryout_attempt_id = ${attemptId}`);
-    await tx.$executeRaw(Prisma.sql`DELETE FROM public."TryOutSubtestScore" WHERE tryout_attempt_id = ${attemptId}`);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM public."TryOutAttempt" WHERE "userId" = ${attempt.userId} AND try_out_id = ${tryoutId} FOR UPDATE`);
+    await tx.$executeRaw(Prisma.sql`DELETE FROM public."UserAnswer" WHERE tryout_attempt_id IN (SELECT id FROM public."TryOutAttempt" WHERE "userId" = ${attempt.userId} AND try_out_id = ${tryoutId})`);
+    await tx.$executeRaw(Prisma.sql`DELETE FROM public."TryOutSubtestScore" WHERE tryout_attempt_id IN (SELECT id FROM public."TryOutAttempt" WHERE "userId" = ${attempt.userId} AND try_out_id = ${tryoutId})`);
+    await tx.$executeRaw(Prisma.sql`DELETE FROM public."TryOutAttempt" WHERE "userId" = ${attempt.userId} AND try_out_id = ${tryoutId}`);
+    const newAttemptId = randomUUID();
     await tx.$executeRaw(Prisma.sql`
-      UPDATE public."TryOutAttempt" SET status = 'NOT_STARTED', total_score = 0,
-        current_subtest_order = 0, subtest_started_at = NULL, finished_at = NULL,
-        started_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
-      WHERE id = ${attemptId} AND try_out_id = ${tryoutId}
+      INSERT INTO public."TryOutAttempt" (id, "userId", try_out_id, status, total_score, current_subtest_order, started_at)
+      VALUES (${newAttemptId}, ${attempt.userId}, ${tryoutId}, 'NOT_STARTED', 0, 0, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
     `);
-    return { id: attemptId, status: 'NOT_STARTED' };
+    return { id: newAttemptId, status: 'NOT_STARTED' };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 15_000 });
 }
