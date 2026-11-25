@@ -8,12 +8,30 @@ export async function listTryoutParticipants(database: PrismaClient, tryoutId: s
   `);
   if (!existing.length) throw new NotFoundException('Tryout tidak ditemukan.');
   return database.$queryRaw(Prisma.sql`
-    SELECT DISTINCT ON (a."userId") a.id, a."userId", u.name, u.email, a.status,
+    WITH latest AS (
+      SELECT DISTINCT ON (a."userId") a.*
+      FROM public."TryOutAttempt" a JOIN public."user" u ON u.id = a."userId"
+      WHERE a.try_out_id = ${tryoutId} AND COALESCE(u."isSandbox", false) = false
+      ORDER BY a."userId", a.started_at DESC, a.id DESC
+    ), ranked AS (
+      SELECT id, row_number() OVER (ORDER BY total_score DESC, finished_at ASC, id ASC)::int AS rank
+      FROM latest WHERE status = 'FINISHED'
+    )
+    SELECT a.id, a."userId", u.name, u.email, a.status,
       a.started_at AT TIME ZONE 'UTC' AS "startedAt",
-      a.finished_at AT TIME ZONE 'UTC' AS "finishedAt"
-    FROM public."TryOutAttempt" a JOIN public."user" u ON u.id = a."userId"
-    WHERE a.try_out_id = ${tryoutId} AND COALESCE(u."isSandbox", false) = false
-    ORDER BY a."userId", a.started_at DESC, a.id DESC
+      a.finished_at AT TIME ZONE 'UTC' AS "finishedAt",
+      CASE WHEN a.status = 'FINISHED' THEN a.total_score ELSE NULL END AS score,
+      r.rank,
+      CASE WHEN a.status = 'FINISHED' THEN COALESCE(answers.correct, 0) ELSE NULL END AS "correctCount",
+      CASE WHEN a.status = 'FINISHED' THEN COALESCE(answers.wrong, 0) ELSE NULL END AS "wrongCount"
+    FROM latest a JOIN public."user" u ON u.id = a."userId"
+    LEFT JOIN ranked r ON r.id = a.id
+    LEFT JOIN LATERAL (
+      SELECT count(*) FILTER (WHERE "isCorrect")::int AS correct,
+             count(*) FILTER (WHERE NOT "isCorrect")::int AS wrong
+      FROM public."UserAnswer" WHERE tryout_attempt_id = a.id
+    ) answers ON a.status = 'FINISHED'
+    ORDER BY r.rank NULLS LAST, u.name, a.id
   `);
 }
 

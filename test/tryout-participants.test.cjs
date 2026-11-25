@@ -34,6 +34,7 @@ test('refuses not-started and outdated attempts without modifying data', async (
   }
 });
 test('participant operations require an administrator', async () => {
-  const service = new ControlCenterService({ getActiveMember: async () => ({ role: 'MEMBER' }) }, {}, { resetTryoutParticipant: async () => { throw Error('unexpected'); } }, {});
+  const service = new ControlCenterService({ getActiveMember: async () => ({ role: 'MEMBER' }) }, {}, { resetTryoutParticipant: async () => { throw Error('unexpected'); }, listTryoutParticipants: async () => { throw Error('unexpected'); } }, {});
   await assert.rejects(service.resetTryoutParticipant('member', 'tryout', 'attempt'), /administrator/i);
+  await assert.rejects(service.listTryoutParticipants('member', 'tryout'), /administrator/i);
 });
