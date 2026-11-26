@@ -40,7 +40,7 @@ team-backend/
 * **Optimistic Versioning**: Task mutations check current version to prevent race condition overwrites.
 * **Control Center Bridge**: Reads/coordinates Main DB tryout & question workflow metrics safely per `ECOSYSTEM_MAP.md`.
 * **Tryout Deletion**: `tryouts.controller.ts` validates the optional `DELETE /team/control-center/tryouts/:id?force=true` flag. Administrator-only force deletion uses `tryout-deletion.ts` in a serializable transaction to remove exam history and sandbox sessions, detach reusable questions by QC status, and delete the tryout/subtests. Default deletion still rejects dependencies.
-* **Tryout Participants**: Administrator-only participant listing and finished-attempt reset are handled by `tryout-participants.ts`; reset preserves registration and solution unlocks.
+* **Tryout Participants**: Administrator-only participant listing and finished-attempt reset are handled by `tryout-participants.ts`; results count correct, wrong and unanswered READY questions across the tryout's subtests. Unfinished attempts have no result counts. Reset preserves registration and solution unlocks.
 
 * **Shared schema initialization**: `jitu_internal.SchemaMigration` records completed lifecycle schema setup so serverless instances avoid repeated DDL and PostgREST schema reloads. Bump the lifecycle marker when its initialization changes.
 * Admin batch removal uses DELETE /api/team/control-center/questions/batches/selected with name, target and optional tryoutId. It clears batch labels on matching active questions.

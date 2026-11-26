@@ -23,13 +23,18 @@ export async function listTryoutParticipants(database: PrismaClient, tryoutId: s
       CASE WHEN a.status = 'FINISHED' THEN a.total_score ELSE NULL END AS score,
       r.rank,
       CASE WHEN a.status = 'FINISHED' THEN COALESCE(answers.correct, 0) ELSE NULL END AS "correctCount",
-      CASE WHEN a.status = 'FINISHED' THEN COALESCE(answers.wrong, 0) ELSE NULL END AS "wrongCount"
+      CASE WHEN a.status = 'FINISHED' THEN COALESCE(answers.wrong, 0) ELSE NULL END AS "wrongCount",
+      CASE WHEN a.status = 'FINISHED' THEN COALESCE(answers.empty, 0) ELSE NULL END AS "emptyCount"
     FROM latest a JOIN public."user" u ON u.id = a."userId"
     LEFT JOIN ranked r ON r.id = a.id
     LEFT JOIN LATERAL (
-      SELECT count(*) FILTER (WHERE "isCorrect")::int AS correct,
-             count(*) FILTER (WHERE NOT "isCorrect")::int AS wrong
-      FROM public."UserAnswer" WHERE tryout_attempt_id = a.id
+      SELECT count(ua.id) FILTER (WHERE ua."isCorrect")::int AS correct,
+             count(ua.id) FILTER (WHERE NOT ua."isCorrect")::int AS wrong,
+             count(q.id) FILTER (WHERE ua.id IS NULL)::int AS empty
+      FROM public."Subtest" s
+      JOIN public."Question" q ON q.subtest_id = s.id AND COALESCE(q.status, 'DRAFT') = 'READY'
+      LEFT JOIN public."UserAnswer" ua ON ua.question_id = q.id AND ua.tryout_attempt_id = a.id
+      WHERE s.try_out_id = a.try_out_id
     ) answers ON a.status = 'FINISHED'
     ORDER BY r.rank NULLS LAST, u.name, a.id
   `);
