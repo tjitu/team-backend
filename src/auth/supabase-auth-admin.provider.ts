@@ -43,6 +43,11 @@ export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
       throw new ConflictException('A Supabase Auth account with this email already exists.');
     }
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new ServiceUnavailableException(response.status === 401
+          ? 'Supabase rejected the server admin key. Update SUPABASE_SECRET_KEY in the Team Backend environment with an active key from the Team Supabase project.'
+          : 'The configured Supabase key cannot manage accounts. Configure a secret key or service_role key from the Team Supabase project.');
+      }
       if (response.status === 400 || response.status === 422) {
         throw new BadRequestException(errorText || 'Supabase Auth rejected the account details or initial password.');
       }
@@ -93,10 +98,18 @@ export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
   }
 
   private configuration() {
-    const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/+$/, '');
-    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, '');
+    const secretKey = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
     if (!supabaseUrl || !secretKey) {
       throw new ServiceUnavailableException('Supabase account management is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.');
+    }
+    if (!secretKey.startsWith('sb_secret_') && !secretKey.startsWith('eyJ')) {
+      throw new ServiceUnavailableException('Supabase account management requires a server secret key or service_role key. Publishable keys cannot create Team accounts.');
+    }
+    if (secretKey.startsWith('eyJ')) {
+      let role: unknown;
+      try { role = (JSON.parse(Buffer.from(secretKey.split('.')[1], 'base64url').toString('utf8')) as { role?: unknown }).role; } catch { /* Reject malformed legacy keys. */ }
+      if (role !== 'service_role') throw new ServiceUnavailableException('Supabase account management requires a service_role key, not an anon or user token.');
     }
     return { supabaseUrl, secretKey };
   }
@@ -104,6 +117,7 @@ export class SupabaseAuthAdminProvider implements AuthUserAdminProvider {
   private headers(secretKey: string): HeadersInit {
     return {
       apikey: secretKey,
+      ...(secretKey.startsWith('eyJ') ? { Authorization: `Bearer ${secretKey}` } : {}),
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };

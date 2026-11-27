@@ -55,6 +55,14 @@ existing trusted-origin and authenticated-session requirements.
 
 ## Test and release
 
+Account creation requires a valid server-only `SUPABASE_SECRET_KEY` from the same
+Team project as `SUPABASE_URL`. `SUPABASE_SERVICE_ROLE_KEY` is supported as a legacy
+fallback. Secret keys are sent as `apikey`; legacy service-role JWTs additionally
+use the Bearer header. Publishable keys and anon/user JWTs are rejected for account
+administration. HTTP 401/403 errors now identify invalid or unauthorized server
+credentials without returning their values. Updating the environment requires a
+backend restart. Do not place these keys in frontend environment variables.
+
 `npm run test:affiliate` builds and runs service, authorization, identity lifecycle,
 agreement, reporting and dependency-graph integration tests. Main Backend must be
 available as the sibling `../jitu-backend`, or set `AFFILIATE_FIXTURE_ROOT` to its

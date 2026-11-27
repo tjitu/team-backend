@@ -1,5 +1,7 @@
 # Affiliate change manifest
 
+- `test/admin-auth-provider.test.cjs`
+
 - `docs/affiliate-runtime-migrations-20261127.md`
 
 - `docs/affiliate-files.md`
