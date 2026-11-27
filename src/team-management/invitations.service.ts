@@ -262,6 +262,7 @@ export class InvitationsService {
   }
 
   private requireInviteRole(actorRole: TeamRole, invitedRole: TeamRole): void {
+    if (invitedRole === TeamRole.AFFILIATOR) throw new ForbiddenException('Create Affiliator credentials through Add Team Member.');
     if (invitedRole === TeamRole.SYSTEM_OWNER) {
       throw new ForbiddenException('System Owner status is reserved for the bootstrap process.');
     }

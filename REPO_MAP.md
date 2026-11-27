@@ -35,6 +35,12 @@ team-backend/
 
 ## 2. Key Architecture Patterns
 
+* **Affiliate workspace**: `src/affiliate/` supplies authenticated self reports/boosts/agreements, administrator configuration/bonus/payouts, and Owner agreement publishing. Financial data stays in Main DB through `AffiliateDatabase`; `AffiliateIdentityService` mirrors Team member lifecycle with fail-closed reconciliation.
+* **New role boundary**: `AFFILIATOR` uses existing Supabase sessions. Global `AffiliatorBoundaryGuard` denies operational APIs and allows only own affiliate APIs plus current membership. Agreement acceptance is additionally required for protected operations. Owner/Admin/Member permissions stay unchanged.
+* **Username alias**: optional unique `TeamMember.username`, `auth/username-login.controller.ts` and `team_login_throttle` forward password verification to existing Supabase Auth without persisting credentials.
+* **Referral assignment**: existing voucher DTOs accept nullable `affiliateId`; admin validation requires an active Team affiliate. Snapshot ledger totals preserve historical commissions after reassignment or rate changes.
+* **Runbook and verification**: `docs/affiliate-program.md` lists endpoints and deployment requirements; `test/affiliate-services.test.cjs` covers acceptance, access, lifecycle, reports and application DI against a temporary local DB.
+
 * **Auth & Permissions**: Validates Supabase bearer access token + `TrustedOriginGuard`; user MUST have an active `TeamMember` row in database.
 * **Audit Trail**: Every project, task, and comment change creates an `ActivityLog` entry in the same transaction.
 * **Optimistic Versioning**: Task mutations check current version to prevent race condition overwrites.

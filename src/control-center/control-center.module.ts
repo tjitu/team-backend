@@ -8,12 +8,14 @@ import { JituPaymentRevenueSource } from './jitu-payment-revenue-source';
 import { REVENUE_DATA_SOURCE } from './revenue-data-source';
 import { JITU_MANAGEMENT_DATA_SOURCE, JituPostgresManagementDataSource } from './jitu-management.data-source';
 import { VercelAnalyticsService } from './vercel-analytics.service';
+import { AffiliateReferralService } from '../affiliate/affiliate-referral.service';
 
 @Module({
   imports: [TeamAccessModule],
   controllers: [ControlCenterController, TryoutsController, PublicArticlesController],
   providers: [
     ControlCenterService,
+    AffiliateReferralService,
     VercelAnalyticsService,
     JituPaymentRevenueSource,
     JituPostgresManagementDataSource,

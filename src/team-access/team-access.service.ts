@@ -22,9 +22,9 @@ export class TeamAccessService {
     else this.memberCache.clear();
   }
 
-  async getActiveMember(userId: string, profileName?: string) {
+  async getActiveMember(userId: string, profileName?: string, fresh = false) {
     const synchronizedName = profileName?.trim().slice(0, 120);
-    const member = await this.findMember(userId);
+    const member = fresh ? await this.prisma.teamMember.findUnique({ where: { userId } }) : await this.findMember(userId);
     if (!member?.isActive) {
       this.memberCache.delete(userId);
       throw new ForbiddenException('This account is not an active Team member.');

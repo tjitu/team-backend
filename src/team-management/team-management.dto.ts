@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 import { TeamRole } from '@prisma/client';
 
 export class ListMembersQueryDto {
@@ -25,6 +25,8 @@ export class UpdateMemberRoleDto {
 }
 
 export class CreateTeamMemberDto {
+  @IsString() @IsOptional() @Length(3,40) @Matches(/^[a-z0-9][a-z0-9._-]+$/)
+  username?: string;
   @IsEmail()
   @MaxLength(320)
   email!: string;

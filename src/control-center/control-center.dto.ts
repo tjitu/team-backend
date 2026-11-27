@@ -183,6 +183,7 @@ export class UpdateDiscountControlDto {
 }
 
 export class CreateVoucherControlDto {
+  @IsString() @IsOptional() @MaxLength(100) affiliateId?: string | null;
   @IsString() @MinLength(2) code!: string;
   @IsInt() @Min(1) @Max(100) discountPercent!: number;
   @IsInt() @Min(0) @Max(100) @IsOptional() commissionPercent?: number;
@@ -202,6 +203,7 @@ export class CreateVoucherControlDto {
 }
 
 export class UpdateVoucherControlDto {
+  @IsString() @IsOptional() @MaxLength(100) affiliateId?: string | null;
   @IsString() @MinLength(2) @IsOptional() code?: string;
   @IsInt() @Min(1) @Max(100) @IsOptional() discountPercent?: number;
   @IsInt() @Min(0) @Max(100) @IsOptional() commissionPercent?: number;

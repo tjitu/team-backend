@@ -14,6 +14,7 @@ enum TeamRole {
   SYSTEM_OWNER
   SYSTEM_ADMIN
   MEMBER
+  AFFILIATOR
 }
 
 enum ProjectRole {
@@ -57,6 +58,7 @@ model TeamMember {
   id        String   @id @default(cuid())
   userId    String   @unique @map("user_id")
   email     String   @unique
+  username  String?  @unique
   name      String
   role      TeamRole @default(MEMBER)
   isActive  Boolean  @default(true) @map("is_active")
@@ -76,6 +78,13 @@ model TeamMember {
   updatedMarketingPartnerships MarketingPartnership[] @relation("MarketingPartnershipUpdater")
 
   @@map("team_members")
+}
+
+model TeamLoginThrottle {
+  key       String @id
+  attempts  Int
+  expiresAt DateTime
+  @@map("team_login_throttle")
 }
 
 model Project {

@@ -51,6 +51,8 @@ export type DiscountInput = {
 };
 
 export type VoucherInput = {
+  affiliateId?: string | null;
+  affiliateAssignedBy?: string;
   code: string;
   discountPercent: number;
   commissionPercent?: number;
@@ -1403,8 +1405,9 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       SELECT
         v."id",
         v."code",
-        v."discountPercent",
-        COALESCE(v."commissionPercent", 0)::int AS "commissionPercent",
+        v."affiliateId",
+        CASE WHEN v."affiliateId" IS NULL THEN v."discountPercent" ELSE (affiliate_rates(v."affiliateId")->>'discount')::numeric/100 END AS "discountPercent",
+        CASE WHEN v."affiliateId" IS NULL THEN COALESCE(v."commissionPercent",0) ELSE (affiliate_rates(v."affiliateId")->>'commission')::numeric/100 END AS "commissionPercent",
         v."maxDiscount",
         v."minPurchase",
         v."maxUsage",
@@ -1426,14 +1429,17 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         u_to."image" AS "resolvedIssuedToImage",
         GREATEST(v."usedCount", COALESCE(pay_stats."confirmedCount", 0))::int AS "totalUsed",
         COALESCE(pay_stats."totalRevenue", 0)::bigint AS "totalRevenue",
-        ROUND(COALESCE(pay_stats."totalRevenue", 0) * (COALESCE(v."commissionPercent", 0) / 100.0))::bigint AS "totalCommission",
-        (COALESCE(pay_stats."totalRevenue", 0) - ROUND(COALESCE(pay_stats."totalRevenue", 0) * (COALESCE(v."commissionPercent", 0) / 100.0)))::bigint AS "netRevenue"
+        COALESCE(affiliate_stats.earned,0)::bigint + ROUND(COALESCE(pay_stats."legacyRevenue",0) * (COALESCE(v."commissionPercent",0)/100.0))::bigint AS "totalCommission",
+        (COALESCE(pay_stats."totalRevenue",0) - COALESCE(affiliate_stats.earned,0) - ROUND(COALESCE(pay_stats."legacyRevenue",0) * (COALESCE(v."commissionPercent",0)/100.0)))::bigint AS "netRevenue"
       FROM public."Voucher" v
       LEFT JOIN public."user" u_to ON u_to."id" = v."issuedToUserId"
+      LEFT JOIN LATERAL (SELECT sum(l.amount) AS earned FROM "AffiliateLedger" l
+        JOIN "AffiliateCheckout" s ON s.id=l."checkoutId" WHERE s."voucherId"=v.id) affiliate_stats ON true
       LEFT JOIN LATERAL (
         SELECT
           COUNT(*)::int AS "confirmedCount",
-          COALESCE(SUM(p."amount"), 0)::bigint AS "totalRevenue"
+          COALESCE(SUM(p."amount"), 0)::bigint AS "totalRevenue",
+          COALESCE(SUM(p."amount") FILTER (WHERE p."affiliateCheckoutId" IS NULL),0)::bigint AS "legacyRevenue"
         FROM public."Payment" p
         WHERE (p."voucherId" = v."id" OR UPPER(COALESCE(p."voucherCode", '')) = UPPER(v."code"))
           AND p."status"::text = 'CONFIRMED'
@@ -1443,6 +1449,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return (rows || []).map((r) => ({
       ...r,
       totalUsed: Number(r.totalUsed ?? 0),
+      discountPercent: Number(r.discountPercent),
+      commissionPercent: Number(r.commissionPercent),
       totalRevenue: Number(r.totalRevenue ?? 0),
       totalCommission: Number(r.totalCommission ?? 0),
       netRevenue: Number(r.netRevenue ?? 0),
@@ -1475,7 +1483,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
     const rows = await this.query(Prisma.sql`
       INSERT INTO public."Voucher" (
-        "id", "code", "discountPercent", "commissionPercent", "maxDiscount", "minPurchase",
+        "id", "code", "discountPercent", "commissionPercent", "maxDiscount", "minPurchase", "affiliateId", "affiliateAssignedBy",
         "maxUsage", "usedCount", "isActive", "expiresAt",
         "description", "referrerName", "issuedToUserId", "issuedToName", "issuedToEmail",
         "issuedByUserId", "issuedByName", "issuedByEmail", "createdAt", "updatedAt"
@@ -1487,6 +1495,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         ${Number(input.commissionPercent ?? 0)},
         ${input.maxDiscount ?? null},
         ${Number(input.minPurchase ?? 0)},
+        ${input.affiliateId ?? null},
+        ${input.affiliateAssignedBy ?? null},
         ${input.maxUsage ?? null},
         0,
         ${input.isActive ?? true},
@@ -1537,6 +1547,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
 
     const rows = await this.query(Prisma.sql`
       UPDATE public."Voucher" SET
+        "affiliateId" = CASE WHEN ${input.affiliateId !== undefined} THEN ${input.affiliateId ?? null} ELSE "affiliateId" END,
+        "affiliateAssignedBy" = ${input.affiliateAssignedBy ?? null},
         "code" = COALESCE(${cleanCode}, "code"),
         "discountPercent" = COALESCE(${input.discountPercent !== undefined ? Number(input.discountPercent) : null}, "discountPercent"),
         "commissionPercent" = COALESCE(${input.commissionPercent !== undefined ? Number(input.commissionPercent) : null}, "commissionPercent"),

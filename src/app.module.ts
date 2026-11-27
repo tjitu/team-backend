@@ -12,10 +12,14 @@ import { ActivityModule } from './activity/activity.module';
 import { AuthModule } from './auth/auth.module';
 import { ControlCenterModule } from './control-center/control-center.module';
 import { MarketingModule } from './marketing/marketing.module';
+import { AffiliateDatabaseModule } from './affiliate/affiliate.database';
+import { AffiliateIdentityModule } from './affiliate/affiliate-identity.service';
+import { AffiliateModule } from './affiliate/affiliate.module';
+import { AffiliatorBoundaryGuard } from './affiliate/affiliator-boundary.guard';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule, DepartmentsModule, ActivityModule, ControlCenterModule, MarketingModule],
+  imports: [DatabaseModule, AuthModule, AffiliateDatabaseModule, AffiliateIdentityModule, AffiliateModule, TeamAccessModule, ProjectsModule, TasksModule, TeamManagementModule, DepartmentsModule, ActivityModule, ControlCenterModule, MarketingModule],
   controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: TrustedOriginGuard }],
+  providers: [{ provide: APP_GUARD, useClass: TrustedOriginGuard }, { provide: APP_GUARD, useClass: AffiliatorBoundaryGuard }],
 })
 export class AppModule {}

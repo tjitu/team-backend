@@ -4,6 +4,7 @@ import { AUTH_USER_ADMIN_PROVIDER, AuthUserAdminProvider } from '../auth/auth-pr
 import { PrismaService } from '../database/prisma.service';
 import { TeamAccessService } from '../team-access/team-access.service';
 import { CreateTeamMemberDto, ListMembersQueryDto, UpdateMemberRoleDto, UpdateMemberStatusDto } from './team-management.dto';
+import { AffiliateIdentityService } from '../affiliate/affiliate-identity.service';
 
 @Injectable()
 export class TeamMembersService {
@@ -12,6 +13,7 @@ export class TeamMembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly teamAccess: TeamAccessService,
+    private readonly affiliates: AffiliateIdentityService,
     @Inject(AUTH_USER_ADMIN_PROVIDER) private readonly authUsers: AuthUserAdminProvider,
   ) {}
 
@@ -26,14 +28,19 @@ export class TeamMembersService {
     const email = input.email.trim().toLowerCase();
     const existing = await this.prisma.teamMember.findUnique({ where: { email } });
     if (existing) throw new ConflictException('A Team member with this email already exists.');
+    if (input.username && await this.prisma.teamMember.findUnique({ where: { username: input.username } })) {
+      throw new ConflictException('A Team member with this username already exists.');
+    }
 
     const authUser = await this.authUsers.createUser({ email, password: input.password, name: input.name.trim() });
+    let affiliateId: string | undefined;
     try {
       const member = await this.prisma.$transaction(async (tx) => {
         const created = await tx.teamMember.create({
           data: {
             userId: authUser.id,
             email: authUser.email.toLowerCase(),
+            username: input.username || null,
             name: input.name.trim(),
             role: input.role,
             isActive: true,
@@ -48,10 +55,12 @@ export class TeamMembersService {
             metadata: { email: created.email, role: created.role },
           },
         });
+        if (created.role === TeamRole.AFFILIATOR) { affiliateId=created.id; await this.affiliates.sync(created); }
         return created;
       });
       return this.publicMember(member);
     } catch (error) {
+      if (affiliateId) await this.disableAffiliateAfterFailure(affiliateId);
       try {
         await this.authUsers.deleteUser(authUser.id);
       } catch (cleanupError) {
@@ -59,7 +68,7 @@ export class TeamMembersService {
         this.logger.error('Could not remove a Supabase Auth user after Team member creation failed.', stack);
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('A Team member with this email already exists.');
+        throw new ConflictException('A Team member with this email or username already exists.');
       }
       throw error;
     }
@@ -83,6 +92,7 @@ export class TeamMembersService {
         id: true,
         userId: true,
         email: true,
+        username: true,
         name: true,
         role: true,
         isActive: true,
@@ -110,7 +120,8 @@ export class TeamMembersService {
     if (target.id === actor.id && !input.isActive) {
       throw new ForbiddenException('You cannot disable your own account.');
     }
-    if (target.isActive === input.isActive) return this.publicMember(target);
+    if (target.isActive === input.isActive && target.role !== TeamRole.AFFILIATOR) return this.publicMember(target);
+    let affiliateSyncAttempted=false;
 
     const result = await this.prisma.$transaction(async (tx) => {
       if (!input.isActive) {
@@ -146,6 +157,7 @@ export class TeamMembersService {
         where: { id: target.id },
         data: { isActive: input.isActive },
       });
+      if (target.role === TeamRole.AFFILIATOR) { affiliateSyncAttempted=true; await this.affiliates.sync(updated); }
       await tx.activityLog.create({
         data: {
           actorTeamMemberId: actor.id,
@@ -156,6 +168,9 @@ export class TeamMembersService {
         },
       });
       return this.publicMember(updated);
+    }).catch(async (error: unknown) => {
+      if (affiliateSyncAttempted) await this.disableAffiliateAfterFailure(target.id);
+      throw error;
     });
     this.teamAccess.invalidate(target.userId);
     return result;
@@ -171,10 +186,12 @@ export class TeamMembersService {
     if (target.role === TeamRole.SYSTEM_OWNER) {
       throw new ForbiddenException('The System Owner role cannot be changed through this endpoint.');
     }
-    if (target.role === input.role) return this.publicMember(target);
+    if (target.role === input.role && target.role !== TeamRole.AFFILIATOR) return this.publicMember(target);
+    let affiliateSyncAttempted=false;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.teamMember.update({ where: { id: target.id }, data: { role: input.role } });
+      if (target.role === TeamRole.AFFILIATOR || updated.role === TeamRole.AFFILIATOR) { affiliateSyncAttempted=true; await this.affiliates.sync(updated); }
       await tx.activityLog.create({
         data: {
           actorTeamMemberId: actor.id,
@@ -185,6 +202,9 @@ export class TeamMembersService {
         },
       });
       return this.publicMember(updated);
+    }).catch(async (error: unknown) => {
+      if (affiliateSyncAttempted) await this.disableAffiliateAfterFailure(target.id);
+      throw error;
     });
     this.teamAccess.invalidate(target.userId);
     return result;
@@ -196,6 +216,11 @@ export class TeamMembersService {
       throw new ForbiddenException('System Owner or System Admin access is required.');
     }
     return actor;
+  }
+
+  private async disableAffiliateAfterFailure(id: string) {
+    try { await this.affiliates.disable(id); }
+    catch { this.logger.error(`Affiliate identity reconciliation required for Team member ${id}.`); }
   }
 
   private async requireOwner(userId: string) {

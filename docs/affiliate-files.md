@@ -1,0 +1,36 @@
+# Affiliate change manifest
+
+- `docs/affiliate-files.md`
+- `docs/affiliate-program.md`
+- `package.json`
+- `prisma/migrations/20261127000100_affiliator_role/migration.sql`
+- `prisma/schema.prisma`
+- `REPO_MAP.md`
+- `src/affiliate/affiliate.database.ts`
+- `src/affiliate/affiliate.dto.ts`
+- `src/affiliate/affiliate.module.ts`
+- `src/affiliate/affiliate.service.ts`
+- `src/affiliate/affiliate.types.ts`
+- `src/affiliate/affiliate-access.service.ts`
+- `src/affiliate/affiliate-admin.controller.ts`
+- `src/affiliate/affiliate-agreements.controller.ts`
+- `src/affiliate/affiliate-agreements.service.ts`
+- `src/affiliate/affiliate-identity.service.ts`
+- `src/affiliate/affiliate-referral.service.ts`
+- `src/affiliate/affiliate-reports.service.ts`
+- `src/affiliate/affiliate-self.controller.ts`
+- `src/affiliate/affiliator-boundary.guard.ts`
+- `src/affiliate/agreement-renderer.ts`
+- `src/app.module.ts`
+- `src/auth/auth.module.ts`
+- `src/auth/username-login.controller.ts`
+- `src/control-center/control-center.dto.ts`
+- `src/control-center/control-center.module.ts`
+- `src/control-center/control-center.service.ts`
+- `src/control-center/jitu-management.data-source.ts`
+- `src/team-access/team-access.controller.ts`
+- `src/team-access/team-access.service.ts`
+- `src/team-management/invitations.service.ts`
+- `src/team-management/team-management.dto.ts`
+- `src/team-management/team-members.service.ts`
+- `test/affiliate-services.test.cjs`

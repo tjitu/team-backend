@@ -3,9 +3,11 @@ import { AUTH_PROVIDER, AUTH_USER_ADMIN_PROVIDER } from './auth-provider';
 import { SessionGuard } from './session.guard';
 import { SupabaseAuthProvider } from './supabase-auth.provider';
 import { SupabaseAuthAdminProvider } from './supabase-auth-admin.provider';
+import { UsernameLoginController } from './username-login.controller';
 
 @Global()
 @Module({
+  controllers: [UsernameLoginController],
   providers: [
     SessionGuard,
     SupabaseAuthProvider,

@@ -4,6 +4,7 @@ import { TeamAccessService } from '../team-access/team-access.service';
 import { REVENUE_DATA_SOURCE, RevenueDataSource } from './revenue-data-source';
 import { ArticleInput, DiscountInput, HiringApplicationInput, JITU_MANAGEMENT_DATA_SOURCE, JituManagementDataSource, ManagedUserInput, PackageInput, TryoutInput, VoucherInput } from './jitu-management.data-source';
 import { VercelAnalyticsService } from './vercel-analytics.service';
+import { AffiliateReferralService } from '../affiliate/affiliate-referral.service';
 
 @Injectable()
 export class ControlCenterService {
@@ -12,6 +13,7 @@ export class ControlCenterService {
     @Inject(REVENUE_DATA_SOURCE) private readonly revenue: RevenueDataSource,
     @Inject(JITU_MANAGEMENT_DATA_SOURCE) private readonly jituManagement: JituManagementDataSource,
     private readonly vercelAnalytics: VercelAnalyticsService,
+    private readonly affiliates: AffiliateReferralService,
   ) {}
 
   async getOverview(userId: string) {
@@ -203,9 +205,11 @@ export class ControlCenterService {
   }
 
   async createVoucher(userId: string, input: VoucherInput, userMeta?: { name?: string; email?: string }) {
-    await this.requireAdministrator(userId);
+    const actor = await this.requireAdministrator(userId);
+    await this.affiliates.validate(input.affiliateId);
     return this.jituManagement.createVoucher({
       ...input,
+      affiliateAssignedBy: actor.id,
       issuedByUserId: input.issuedByUserId || userId,
       issuedByName: input.issuedByName || userMeta?.name || 'Admin',
       issuedByEmail: input.issuedByEmail || userMeta?.email,
@@ -213,8 +217,9 @@ export class ControlCenterService {
   }
 
   async updateVoucher(userId: string, id: string, input: Partial<VoucherInput>) {
-    await this.requireAdministrator(userId);
-    const result = await this.jituManagement.updateVoucher(id, input);
+    const actor = await this.requireAdministrator(userId);
+    await this.affiliates.validate(input.affiliateId);
+    const result = await this.jituManagement.updateVoucher(id, { ...input, affiliateAssignedBy: actor.id });
     if (!result) throw new NotFoundException('Voucher not found.');
     return result;
   }
