@@ -1,5 +1,9 @@
 # Team affiliate API
 
+Runtime update: the configured databases received the additive feature SQL on
+27 November 2026. Read [the execution record](affiliate-runtime-migrations-20261127.md)
+before running migration deployment again; historical Prisma baselining is pending.
+
 The implementation shares existing Supabase sessions and Team Management. Read
 `jitu-backend/docs/affiliate-program.md` for financial rules, migrations, deployment
 order, Owner decisions, synchronization recovery and production verification.
@@ -59,4 +63,5 @@ environment overrides; Supabase account creation uses a test adapter.
 
 Deploy the Main DB migrations first, then `npm run db:deploy` and
 `npm run db:generate` for Team DB. All four services must be deployed before
-assigning a code. No migration or live account creation was performed on production.
+assigning a code. The additive runtime SQL has since been applied as documented
+in the execution record above. No live account creation was performed for testing.

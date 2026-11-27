@@ -1,5 +1,7 @@
 # Affiliate change manifest
 
+- `docs/affiliate-runtime-migrations-20261127.md`
+
 - `docs/affiliate-files.md`
 - `docs/affiliate-program.md`
 - `package.json`
