@@ -9,12 +9,15 @@ import { REVENUE_DATA_SOURCE } from './revenue-data-source';
 import { JITU_MANAGEMENT_DATA_SOURCE, JituPostgresManagementDataSource } from './jitu-management.data-source';
 import { VercelAnalyticsService } from './vercel-analytics.service';
 import { AffiliateReferralService } from '../affiliate/affiliate-referral.service';
+import { GrowthAdminController } from './growth/growth-admin.controller';
+import { GrowthAdminService } from './growth/growth-admin.service';
 
 @Module({
   imports: [TeamAccessModule],
-  controllers: [ControlCenterController, TryoutsController, PublicArticlesController],
+  controllers: [ControlCenterController, TryoutsController, PublicArticlesController, GrowthAdminController],
   providers: [
     ControlCenterService,
+    GrowthAdminService,
     AffiliateReferralService,
     VercelAnalyticsService,
     JituPaymentRevenueSource,

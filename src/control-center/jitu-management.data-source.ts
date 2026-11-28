@@ -7,8 +7,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { VercelAnalyticsService } from './vercel-analytics.service';
 import { deleteTryoutRecords } from './tryout-deletion';
 import { listTryoutParticipants, resetTryoutParticipant } from './tryout-participants';
+import { rethrowGrowthError } from './growth/growth-errors';
 
 export type TryoutInput = {
+  growthConfig?: Record<string, unknown>;
+  growthVersion?: number;
+  growthActorId?: string;
   title?: string;
   description?: string | null;
   solutionPrice?: number;
@@ -993,7 +997,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         t."revision_notes" AS "revisionNotes",
         t."reviewed_by" AS "reviewedBy",
         t."reviewed_at" AS "reviewedAt",
-        t."isPublic", t."referralCode", t."createdAt",
+        t."isPublic", t."referralCode", t."createdAt",t."growthConfig",t."growthVersion",
         COALESCE(qc."questionCount", 0)::int AS "questionCount",
         COALESCE(qc."readyQuestionCount", 0)::int AS "readyQuestionCount",
         COALESCE(sd."totalDurationMinutes", 195)::int AS "totalDurationMinutes",
@@ -1073,13 +1077,14 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       INSERT INTO public."TryOut" (
         "id", "title", "description", "solutionPrice", "batch", "releaseDate",
         "scheduledStart", "scheduledEnd", "status", "curation_status",
-        "questions_released", "break_seconds", "isPublic", "referralCode"
+        "questions_released", "break_seconds", "isPublic", "referralCode","growthConfig","growthVersion","growthUpdatedBy"
       )
       VALUES (
         ${randomUUID()}, ${input.title}, ${input.description ?? null}, ${input.solutionPrice},
         CAST(${batch} AS public."TryoutBatch"), CURRENT_TIMESTAMP,
         ${start}, ${end}, CAST(${status} AS public."TryoutStatus"), 'DRAFT',
-        false, ${breakSeconds}, ${input.isPublic ?? true}, ${input.referralCode || null}
+        false, ${breakSeconds}, ${input.isPublic ?? true}, ${input.referralCode || null},
+        growth_validate_config(${JSON.stringify(input.growthConfig ?? { enabled: false })}::jsonb),${input.growthConfig ? 1 : 0},${input.growthActorId ?? null}
       )
       RETURNING
         "id", "code", "title", "description", "solutionPrice", "batch"::text AS "batch",
@@ -1089,7 +1094,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "questions_released_at" AS "questionsReleasedAt",
         COALESCE("break_seconds", 60)::int AS "breakSeconds",
         "revision_notes" AS "revisionNotes", "reviewed_by" AS "reviewedBy", "reviewed_at" AS "reviewedAt",
-        "isPublic", "referralCode", "createdAt"
+        "isPublic", "referralCode", "createdAt","growthConfig","growthVersion"
     `);
     const created = Array.isArray(rows) ? rows[0] ?? null : null;
     if (created?.id) {
@@ -1129,8 +1134,12 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     const status = end && now > end.getTime() ? 'FINISHED' : start && end && now >= start.getTime() ? 'IN_PROGRESS' : 'NOT_STARTED';
     const breakSeconds =
       input.breakSeconds !== undefined ? Math.max(0, Math.min(1800, Math.round(Number(input.breakSeconds)))) : null;
-    const rows = await this.query<Array<Record<string, any>>>(Prisma.sql`
+    const rows = await this.query<Array<Record<string, unknown> & { curationStatus: string; isPublic: boolean; scheduledStart: Date | null }>>(Prisma.sql`
       UPDATE public."TryOut" SET
+        "growthConfig" = CASE WHEN ${input.growthConfig !== undefined} THEN
+          growth_config_update(${JSON.stringify(input.growthConfig ?? {})}::jsonb,"growthVersion",${input.growthVersion ?? null}::integer) ELSE "growthConfig" END,
+        "growthVersion" = "growthVersion" + CASE WHEN ${input.growthConfig !== undefined} THEN 1 ELSE 0 END,
+        "growthUpdatedBy" = CASE WHEN ${input.growthConfig !== undefined} THEN ${input.growthActorId ?? null} ELSE "growthUpdatedBy" END,
         "title" = COALESCE(${input.title ?? null}, "title"),
         "description" = CASE WHEN ${input.description !== undefined} THEN ${input.description ?? null} ELSE "description" END,
         "solutionPrice" = COALESCE(${input.solutionPrice ?? null}, "solutionPrice"),
@@ -1150,7 +1159,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
         "questions_released_at" AS "questionsReleasedAt",
         COALESCE("break_seconds", 60)::int AS "breakSeconds",
         "revision_notes" AS "revisionNotes", "reviewed_by" AS "reviewedBy", "reviewed_at" AS "reviewedAt",
-        "isPublic", "referralCode", "createdAt"
+        "isPublic", "referralCode", "createdAt","growthConfig","growthVersion"
     `);
     this.invalidateOverview();
     const updated = Array.isArray(rows) ? rows[0] ?? null : null;
@@ -4309,6 +4318,8 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
     return this.prisma;
   }
 
+  growthDatabase(): PrismaClient { return this.database(); }
+
   private async execute(statement: Prisma.Sql): Promise<void> {
     await this.query(statement);
   }
@@ -4319,6 +4330,7 @@ export class JituPostgresManagementDataSource implements JituManagementDataSourc
       try {
         return await this.database().$queryRaw<T>(statement);
       } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && String(error.meta?.message ?? '').includes('GROWTH_')) rethrowGrowthError(error);
         lastError = error;
         const isTransient =
           error instanceof Prisma.PrismaClientInitializationError ||

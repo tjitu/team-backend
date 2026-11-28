@@ -1,6 +1,8 @@
-import { IsUUID, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsUUID, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateTryoutControlDto {
+  @IsOptional() @IsObject() growthConfig?: Record<string, unknown>;
+  @IsOptional() @IsInt() @Min(0) growthVersion?: number;
   @IsString() @MinLength(2) title!: string;
   @IsString() @IsOptional() description?: string;
   @IsInt() @Min(0) solutionPrice!: number;
@@ -13,6 +15,8 @@ export class CreateTryoutControlDto {
 }
 
 export class UpdateTryoutControlDto {
+  @IsOptional() @IsObject() growthConfig?: Record<string, unknown>;
+  @IsOptional() @IsInt() @Min(0) growthVersion?: number;
   @IsString() @MinLength(2) @IsOptional() title?: string;
   @IsString() @IsOptional() description?: string | null;
   @IsInt() @Min(0) @IsOptional() solutionPrice?: number;

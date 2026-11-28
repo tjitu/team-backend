@@ -66,18 +66,18 @@ export class ControlCenterService {
   }
 
   async createTryout(userId: string, input: TryoutInput & Required<Pick<TryoutInput, 'title' | 'solutionPrice' | 'scheduledStart' | 'scheduledEnd'>>) {
-    await this.requireAdministrator(userId);
+    const actor = await this.requireAdministrator(userId, input.growthConfig !== undefined);
     const start = new Date(input.scheduledStart).getTime();
     const end = new Date(input.scheduledEnd).getTime();
     if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
       throw new BadRequestException('Tryout end time must be after its start time.');
     }
-    return this.jituManagement.createTryout(input);
+    return this.jituManagement.createTryout({ ...input, growthActorId: actor.id });
   }
 
   async updateTryout(userId: string, id: string, input: TryoutInput) {
-    await this.requireAdministrator(userId);
-    const result = await this.jituManagement.updateTryout(id, input);
+    const actor = await this.requireAdministrator(userId, input.growthConfig !== undefined);
+    const result = await this.jituManagement.updateTryout(id, { ...input, growthActorId: actor.id });
     if (!result) throw new NotFoundException('Tryout not found.');
     return result;
   }
@@ -489,8 +489,8 @@ export class ControlCenterService {
     return fallback;
   }
 
-  private async requireAdministrator(userId: string) {
-    const member = await this.teamAccess.getActiveMember(userId);
+  private async requireAdministrator(userId: string, fresh = false) {
+    const member = await this.teamAccess.getActiveMember(userId, undefined, fresh);
     this.assertAdministrator(member.role);
     return member;
   }

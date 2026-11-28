@@ -7,6 +7,7 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "test:growth": "npm run build && node --test test/growth-admin.test.cjs",
     "test:affiliate": "npm run build && node --test test/affiliate-services.test.cjs test/admin-auth-provider.test.cjs",
     "postinstall": "prisma generate",
     "build": "nest build",

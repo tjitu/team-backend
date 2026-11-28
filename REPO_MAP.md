@@ -51,3 +51,5 @@ team-backend/
 * **Shared schema initialization**: `jitu_internal.SchemaMigration` records completed lifecycle schema setup so serverless instances avoid repeated DDL and PostgREST schema reloads. Bump the lifecycle marker when its initialization changes.
 * Admin batch removal uses DELETE /api/team/control-center/questions/batches/selected with name, target and optional tryoutId. It clears batch labels on matching active questions.
 * Admin POST /api/team/control-center/questions/bulk-delete removes selected questions in one transaction. When the tryout editor supplies its tryoutId, the transaction also clears sandbox answers for those questions in that tryout. Other answer history blocks the deletion.
+
+* **Registration growth**: `src/control-center/growth/` owns authenticated Owner/Admin configuration, private verification queue/detail/review and analytics. Existing tryout create/edit atomically validates/version-checks Main DB growth settings; it reuses `JituPostgresManagementDataSource.growthDatabase()`. Main repo owns migrations; optional `JITU_COMMUNITY_URL` prefills new settings. See `docs/registration-growth.md` and `npm run test:growth`.
